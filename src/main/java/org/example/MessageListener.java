@@ -76,20 +76,48 @@ public class MessageListener extends ListenerAdapter {
 
     @Override
     public void onMessageReceived(MessageReceivedEvent event) {
+        if (event.getAuthor().isBot()) return;
+
         String message = event.getMessage().getContentRaw();
+        String currentNickname = event.getMember().getEffectiveName();
+        String pureName = currentNickname.replaceAll("\\[.*?\\]", "").trim();
+        String nickname = pureName; //
+
+        boolean isAdmin = event.getMember() != null && event.getMember().hasPermission(Permission.ADMINISTRATOR);
+
+        if (message.startsWith("!포인트지급")) {
+            // 1. 관리자 체크
+            if (!event.getMember().isOwner()) {
+                event.getChannel().sendMessage("서버 주인만 사용할 수 있는 기능입니다!").queue();
+                return;
+            }
+
+            // 2. 명령어 형식 확인 (예: !포인트지급 @유저 1000)
+            String[] parts = message.split(" ");
+            if (parts.length < 3) {
+                event.getChannel().sendMessage("사용법: `!포인트지급 [이름] [금액]`").queue();
+                return;
+            }
+
+            String targetName = parts[1]; // 대상 이름
+            int amount = Integer.parseInt(parts[2]); // 지급할 금액
+
+            // 3. 포인트 지급 로직
+            int currentPoints = userPoints.getOrDefault(targetName, 0);
+            userPoints.put(targetName, currentPoints + amount);
+            DataManaGer.savePoints(userPoints);
+
+            event.getChannel().sendMessage(" **[" + targetName + "]**님께 **" + amount + " P** 지급 완료!").queue();
+        }
+
+        if (!isAdmin) {
+            checkTitlse(event);
+            // [중복 닉네임 로직 생략: 기존 코드의 도용 방지 로직을 여기에 배치하세요]
+        }
 
         if (event.getAuthor().isBot()) {
             return;
         }
-
-        // 디코방에 표시된 이름
-        String currentNickname = event.getMember().getEffectiveName();
-        // [칭호]를 지운 이름
-        String pureName = currentNickname.replaceAll("\\[.*?\\]", "").trim();
-        String nickName = pureName;
-
-        //채팅 시 칭호 유통기한 검사 및 회수
-        checkTitlse(event);
 
         // 칭호 유무 확인
         String realTitle = userTitles.get(pureName);
@@ -105,8 +133,11 @@ public class MessageListener extends ListenerAdapter {
 
         //별명변겅으로 인한 칭호 검사
         if (currentNickname.contains("[") && currentNickname.contains("]")) {
-            //관리자 통과
-//            if (!event.getMember().isOwner() && !event.getMember().hasPermission(Permission.ADMINISTRATOR))
+
+            // 관리자이거나 서버 주인이면 검사를 건너뜁니다 (이 부분을 수정하세요)
+            if (event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+                return; // 관리자는 여기서 바로 함수를 종료해서 감지 로직을 아예 안 탑니다.
+            }
 
             String tagInNickname = currentNickname.substring(currentNickname.indexOf("[") + 1, currentNickname.indexOf("]"));
 
@@ -133,7 +164,7 @@ public class MessageListener extends ListenerAdapter {
 
             }
         }
-        String nickname = pureName;
+
 
 
         //명령어 종류
@@ -151,9 +182,7 @@ public class MessageListener extends ListenerAdapter {
         }
         //출석체크
         if (message.equals("!출첵")) {
-            //오늘날짜oogleSheetService.java
             java.time.LocalDate today = java.time.LocalDate.now();
-            //유저 마지막 출석날짜
             java.time.LocalDate lastDate = lastCheckInDates.get(nickname);
 
             if (lastDate != null && lastDate.equals(today)) {
@@ -161,23 +190,25 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
+            // 1. 신규/기존 확인 후 포인트 계산
             int bonus = 0;
-            String bonusMsg = "";
+            String msg = " **[" + chatName + "]** 님이 출석체크를 완료하여 10포인트가 지급되었습니다.";
+
             if (!userPoints.containsKey(nickname)){
                 bonus = 100;
-                bonusMsg = " **[신규 환영!]** 첫 출첵 보너스로 100포인트 추가 지급!";
+                msg = " **[" + chatName + "]** 님, 첫 출첵! 보너스 100포인트 포함 **110포인트**가 지급되었습니다.";
             }
 
             int currentPoint = userPoints.getOrDefault(nickname, 0);
-            int newPoint = currentPoint + 15;
+            int newPoint = currentPoint + 10 + bonus; // 10(기본) + 보너스(신규일 때 100)
 
             userPoints.put(nickname, newPoint);
-
             lastCheckInDates.put(nickname, today);
-
             DataManaGer.savePoints(userPoints);
 
-            event.getChannel().sendMessage(" **[" + chatName + "]** 님이 출석체크를 완료하여 10포인트가 지급되었습니다.").queue();
+            event.getChannel().sendMessage(msg).queue();
+            return; // 로직 끝
+
         }
         //포인트 확인
         if (message.equals("!포인트")) {
@@ -394,29 +425,6 @@ public class MessageListener extends ListenerAdapter {
 
             DataManaGer.savePoints(userPoints);
         }
-        if (message.startsWith("!포인트지급")) {
-            // 1. 관리자 체크
-            if (!event.getMember().isOwner()) {
-                event.getChannel().sendMessage("서버 주인만 사용할 수 있는 기능입니다!").queue();
-                return;
-            }
 
-            // 2. 명령어 형식 확인 (예: !포인트지급 @유저 1000)
-            String[] parts = message.split(" ");
-            if (parts.length < 3) {
-                event.getChannel().sendMessage("사용법: `!포인트지급 [이름] [금액]`").queue();
-                return;
-            }
-
-            String targetName = parts[1]; // 대상 이름
-            int amount = Integer.parseInt(parts[2]); // 지급할 금액
-
-            // 3. 포인트 지급 로직
-            int currentPoints = userPoints.getOrDefault(targetName, 0);
-            userPoints.put(targetName, currentPoints + amount);
-            DataManaGer.savePoints(userPoints);
-
-            event.getChannel().sendMessage(" **[" + targetName + "]**님께 **" + amount + " P** 지급 완료!").queue();
-        }
     }
 }
