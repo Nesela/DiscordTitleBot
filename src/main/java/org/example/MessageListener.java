@@ -19,7 +19,7 @@ public class MessageListener extends ListenerAdapter {
 
     //가격표 변수 기본값
     private int publicTitlePrice = 100;
-    private int customTitlePrice = 200;
+    private int customTitlePrice = 150;
 
     //유통기한 날짜생성
     private String getExpirationDate(int days) {
@@ -153,7 +153,6 @@ public class MessageListener extends ListenerAdapter {
         if (message.equals("!출첵")) {
             //오늘날짜oogleSheetService.java
             java.time.LocalDate today = java.time.LocalDate.now();
-
             //유저 마지막 출석날짜
             java.time.LocalDate lastDate = lastCheckInDates.get(nickname);
 
@@ -162,8 +161,15 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
+            int bonus = 0;
+            String bonusMsg = "";
+            if (!userPoints.containsKey(nickname)){
+                bonus = 100;
+                bonusMsg = " **[신규 환영!]** 첫 출첵 보너스로 100포인트 추가 지급!";
+            }
+
             int currentPoint = userPoints.getOrDefault(nickname, 0);
-            int newPoint = currentPoint + 10;
+            int newPoint = currentPoint + 15;
 
             userPoints.put(nickname, newPoint);
 
