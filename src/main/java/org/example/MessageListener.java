@@ -85,27 +85,31 @@ public class MessageListener extends ListenerAdapter {
 
         boolean isAdmin = event.getMember() != null && event.getMember().hasPermission(Permission.ADMINISTRATOR);
 
-        if (message.startsWith("!포인트지급")) {
-            // ★ [수정] 방장(Owner) OR 관리자 권한(ADMINISTRATOR) 확인
+        if (message.startsWith("!포인트지급 ")) { // 한 칸 띄우고 시작
+            // 관리자 권한 확인
             boolean isStaff = event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR);
-
             if (!isStaff) {
                 event.getChannel().sendMessage("서버 운영진만 사용할 수 있는 기능입니다!").queue();
                 return;
             }
 
-            // 2. 명령어 형식 확인 (예: !포인트지급 @유저 1000)
-            String[] parts = message.split(" ");
-            if (parts.length < 3) {
-                event.getChannel().sendMessage("사용법: `!포인트지급 [이름] [금액]`").queue();
+            // 명령어에서 명령어 부분을 제외하고 추출
+            String content = message.substring("!포인트지급 ".length()).trim();
+
+            // 마지막 공백을 찾아 이름과 금액을 분리
+            int lastSpaceIndex = content.lastIndexOf(" ");
+            if (lastSpaceIndex == -1) {
+                event.getChannel().sendMessage("사용법: `!포인트지급 [닉네임] [금액]`").queue();
                 return;
             }
 
-            String targetName = parts[1]; // 대상 이름
-            try {
-                int amount = Integer.parseInt(parts[2]); // 사용자가 숫자를 안 넣으면 여기서 에러 발생
+            String targetName = content.substring(0, lastSpaceIndex); // 중간에 띄어쓰기가 있어도 다 합쳐짐
+            String amountStr = content.substring(lastSpaceIndex + 1); // 마지막 단어는 금액
 
-                // 3. 포인트 지급 로직
+            try {
+                int amount = Integer.parseInt(amountStr);
+
+                // 포인트 지급 로직
                 int currentPoints = userPoints.getOrDefault(targetName, 0);
                 userPoints.put(targetName, currentPoints + amount);
                 DataManaGer.savePoints(userPoints);
@@ -113,8 +117,7 @@ public class MessageListener extends ListenerAdapter {
                 event.getChannel().sendMessage(" **[" + targetName + "]**님께 **" + amount + " P** 지급 완료!").queue();
 
             } catch (NumberFormatException e) {
-                // 숫자가 아닐 경우 봇이 죽지 않고 친절하게 알려줍니다.
-                event.getChannel().sendMessage(" **[오류]** 금액은 반드시 **숫자**로 입력해주세요! (입력하신 값: " + parts[2] + ")").queue();
+                event.getChannel().sendMessage(" **[오류]** 마지막에 입력한 **" + amountStr + "**은(는) 숫자가 아닙니다! 금액을 확인해주세요.").queue();
             }
         }
 
