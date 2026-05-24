@@ -132,12 +132,8 @@ public class MessageListener extends ListenerAdapter {
         }
 
         //별명변겅으로 인한 칭호 검사
-        if (currentNickname.contains("[") && currentNickname.contains("]")) {
-
-            // 관리자이거나 서버 주인이면 검사를 건너뜁니다 (이 부분을 수정하세요)
-            if (event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
-                return; // 관리자는 여기서 바로 함수를 종료해서 감지 로직을 아예 안 탑니다.
-            }
+        if (!isAdmin) {
+            if (currentNickname.contains("[") && currentNickname.contains("]")) {
 
             String tagInNickname = currentNickname.substring(currentNickname.indexOf("[") + 1, currentNickname.indexOf("]"));
 
@@ -164,7 +160,7 @@ public class MessageListener extends ListenerAdapter {
 
             }
         }
-
+}
 
 
         //명령어 종류
