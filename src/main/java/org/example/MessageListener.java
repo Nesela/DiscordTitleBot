@@ -150,7 +150,7 @@ public class MessageListener extends ListenerAdapter {
         }
         //출석체크
         if (message.equals("!출첵")) {
-            //오늘날짜
+            //오늘날짜oogleSheetService.java
             java.time.LocalDate today = java.time.LocalDate.now();
 
             //유저 마지막 출석날짜

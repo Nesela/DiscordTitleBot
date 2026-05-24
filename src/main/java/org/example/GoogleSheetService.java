@@ -8,17 +8,24 @@ import com.google.api.services.sheets.v4.model.ValueRange;
 import com.google.auth.http.HttpCredentialsAdapter;
 import com.google.auth.oauth2.GoogleCredentials;
 
-import java.io.FileInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.util.Collections;
 import java.util.List;
 
-public class GoogleSheetService { // 클래스 이름을 파일명과 똑같이 유지하세요
+public class GoogleSheetService {
     private static final String SPREADSHEET_ID = "1fPcmdfE_5scHzh2mXhdtDGPzlpBybvkibHWNWeRViCY";
-    private static final String JSON_PATH = "discordbot-497307-49605bfd20e5.json";
 
     public static Sheets getSheetsService() throws Exception {
-        GoogleCredentials credentials = GoogleCredentials.fromStream(new FileInputStream(JSON_PATH))
+        // 레일웨이에서 설정한 환경변수 GOOGLE_CREDENTIALS를 가져옵니다
+        String jsonContent = System.getenv("GOOGLE_CREDENTIALS");
+
+        // 문자열을 InputStream으로 변환
+        InputStream serviceAccount = new ByteArrayInputStream(jsonContent.getBytes());
+
+        GoogleCredentials credentials = GoogleCredentials.fromStream(serviceAccount)
                 .createScoped(Collections.singleton(SheetsScopes.SPREADSHEETS));
+
         return new Sheets.Builder(GoogleNetHttpTransport.newTrustedTransport(), GsonFactory.getDefaultInstance(), new HttpCredentialsAdapter(credentials))
                 .setApplicationName("DiscordBot").build();
     }

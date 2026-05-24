@@ -16,5 +16,3 @@ out/
 .classpath
 .vscode/
 .DS_Store
-
-*.json
