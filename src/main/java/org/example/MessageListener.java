@@ -387,5 +387,29 @@ public class MessageListener extends ListenerAdapter {
 
             DataManaGer.savePoints(userPoints);
         }
+        if (message.startsWith("!포인트지급")) {
+            // 1. 관리자 체크
+            if (!event.getMember().isOwner()) {
+                event.getChannel().sendMessage("서버 주인만 사용할 수 있는 기능입니다!").queue();
+                return;
+            }
+
+            // 2. 명령어 형식 확인 (예: !포인트지급 @유저 1000)
+            String[] parts = message.split(" ");
+            if (parts.length < 3) {
+                event.getChannel().sendMessage("사용법: `!포인트지급 [이름] [금액]`").queue();
+                return;
+            }
+
+            String targetName = parts[1]; // 대상 이름
+            int amount = Integer.parseInt(parts[2]); // 지급할 금액
+
+            // 3. 포인트 지급 로직
+            int currentPoints = userPoints.getOrDefault(targetName, 0);
+            userPoints.put(targetName, currentPoints + amount);
+            DataManaGer.savePoints(userPoints);
+
+            event.getChannel().sendMessage(" **[" + targetName + "]**님께 **" + amount + " P** 지급 완료!").queue();
+        }
     }
 }
