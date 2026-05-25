@@ -482,25 +482,33 @@ public class MessageListener extends ListenerAdapter {
             return;
         }
         //선물하기
-        if (message.startsWith("!선물 ")) {
-            // 1. 명령어 형식 체크 (공백 기준으로 자르기)
-            String content = message.substring(4).trim(); // "!선물 " 제외
+        if (message.startsWith("!선물")) {
+
+            // 1. 순수하게 "!선물"만 입력했거나 뒤에 아무것도 없는 경우
+            if (message.trim().equals("!선물")) {
+                event.getChannel().sendMessage("사용법: `!선물 [받을사람] [금액]`").queue();
+                return;
+            }
+
+            // 2. 이제 "!선물 " 이후의 내용을 안전하게 가져옵니다.
+            String content = message.substring(3).trim(); // "!선물" 뒤의 내용 추출
             int lastSpaceIndex = content.lastIndexOf(" ");
 
+            // 3. 닉네임과 금액을 나눌 공백이 없는 경우
             if (lastSpaceIndex == -1) {
                 event.getChannel().sendMessage("사용법: `!선물 [받을사람] [금액]`").queue();
                 return;
             }
 
-            String senderName = pureName; // 보내는 사람
-            String receiverName = content.substring(0, lastSpaceIndex).trim(); // 받을 사람 (띄어쓰기 포함)
-            String amountStr = content.substring(lastSpaceIndex + 1); // 금액
+            String senderName = pureName;
+            String receiverName = content.substring(0, lastSpaceIndex).trim();
+            String amountStr = content.substring(lastSpaceIndex + 1);
 
             try {
                 int amount = Integer.parseInt(amountStr);
                 int senderPoints = userPoints.getOrDefault(senderName, 0);
 
-                // 2. 예외 처리
+                // 예외 처리
                 if (amount <= 0) {
                     event.getChannel().sendMessage("금액은 1 이상이어야 합니다.").queue();
                     return;
@@ -513,10 +521,12 @@ public class MessageListener extends ListenerAdapter {
                     event.getChannel().sendMessage("포인트가 부족합니다! (현재 보유: " + senderPoints + " P)").queue();
                     return;
                 }
+
+                // 유저 찾기 로직
                 boolean userFound = false;
                 for (String key : userPoints.keySet()) {
-                    if (key.replaceAll("\\s+", "").equals(receiverName.replaceAll("\\s+", ""))) {
-                        receiverName = key; // 진짜 키값으로 닉네임을 보정함
+                    if (key.replaceAll("\\s+", "").equalsIgnoreCase(receiverName.replaceAll("\\s+", ""))) {
+                        receiverName = key;
                         userFound = true;
                         break;
                     }
@@ -527,11 +537,11 @@ public class MessageListener extends ListenerAdapter {
                     return;
                 }
 
-                // 3. 포인트 이동 및 저장
+                // 포인트 이동
                 userPoints.put(senderName, senderPoints - amount);
                 userPoints.put(receiverName, userPoints.getOrDefault(receiverName, 0) + amount);
 
-                DataManaGer.savePoints(userPoints); // 파일 저장
+                DataManaGer.savePoints(userPoints);
 
                 event.getChannel().sendMessage("🎁 **" + senderName + "**님이 **" + receiverName + "**님에게 **" + amount + " P**를 선물했습니다!").queue();
 
