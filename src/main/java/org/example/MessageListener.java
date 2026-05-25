@@ -17,6 +17,8 @@ public class MessageListener extends ListenerAdapter {
     //마지막 출석체크 날짜
     private HashMap<String, java.time.LocalDate> lastCheckInDates = new HashMap<>();
 
+    private HashMap<String, Integer> userDebt = DataManaGer.loadDebts();
+    private HashMap<String, LocalDate> debtDeadline = DataManaGer.loadDeadlines();
     //가격표 변수 기본값
     private int publicTitlePrice = 100;
     private int customTitlePrice = 150;
@@ -71,6 +73,27 @@ public class MessageListener extends ListenerAdapter {
             if (!event.getMember().isOwner()) {
                 event.getMember().modifyNickname(pureName).queue();
             }
+        }
+        // 만기일 확인 및 강제 마이너스 처리
+        if (debtDeadline.containsKey(nickname) && LocalDate.now().isAfter(debtDeadline.get(nickname))) {
+            int points = userPoints.getOrDefault(nickname, 0);
+            int debt = userDebt.get(nickname);
+
+            // 1. 포인트에서 빚을 뺌 (결과가 마이너스가 됨)
+            userPoints.put(nickname, points - debt);
+
+            // 2. 빚/만기일 기록 삭제
+            userDebt.remove(nickname);
+            debtDeadline.remove(nickname);
+
+            DataManaGer.saveDebts(userDebt);
+            DataManaGer.saveDeadlines(debtDeadline);
+
+            // 3. 칭호 변경
+            event.getMember().modifyNickname("[노예] " + pureName).queue();
+            event.getChannel().sendMessage("⛓️ **[" + nickname + "]**님의 대출 만기일이 지나 모든 자산이 압류되었습니다. 현재 잔고: **" + (points - debt) + " P**").queue();
+
+            DataManaGer.savePoints(userPoints);
         }
     }
 
@@ -246,8 +269,11 @@ public class MessageListener extends ListenerAdapter {
         //포인트 확인
         if (message.equals("!포인트")) {
             int myPoint = userPoints.getOrDefault(nickname, 0);
+            int myDebt = userDebt.getOrDefault(nickname, 0);
+            int actualBalance = myPoint - myDebt; // 빚을 제외한 진짜 잔고
 
-            event.getChannel().sendMessage(" **[" + chatName + "]** 님의 자산 " + myPoint + " P 보유 중입니다.").queue();
+            String status = (myDebt > 0) ? " (빚: " + myDebt + " P)" : "";
+            event.getChannel().sendMessage("💰 **[" + chatName + "]** 님의 현재 잔고: **" + actualBalance + " P**" + status).queue();
         }
         //칭호 종류 가격 확인
         if (message.equals("!칭호상점")) {
@@ -407,6 +433,7 @@ public class MessageListener extends ListenerAdapter {
             event.getChannel().sendMessage(sb.toString()).queue();
         }
         //도박 홀짝
+        //도박 홀짝
         if (message.startsWith("!홀짝")) {
             String[] parts = message.split(" ");
             if (parts.length < 3) {
@@ -428,9 +455,13 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
+            // [수정된 부분] 빚을 제외한 실제 잔고 계산
             int myPoint = userPoints.getOrDefault(nickname, 0);
-            if (bet > myPoint) {
-                event.getChannel().sendMessage(" **[" + nickname + "]**님, 포인트가 부족합니다!").queue();
+            int myDebt = userDebt.getOrDefault(nickname, 0);
+            int actualBalance = myPoint - myDebt;
+
+            if (bet > actualBalance) {
+                event.getChannel().sendMessage(" **[" + nickname + "]**님, 포인트가 부족합니다! (현재 실제 잔고: " + actualBalance + " P)").queue();
                 return;
             }
 
@@ -440,17 +471,14 @@ public class MessageListener extends ListenerAdapter {
             boolean isWin = (choice.equals(resultStr));
 
             if (isWin) {
-                // 이겼을 때: 기존 자산에 배팅액만큼 더해줌 (결과적으로 배팅액 2배를 가져감)
+                // 이겼을 때
                 userPoints.put(nickname, myPoint + bet);
-
                 event.getChannel().sendMessage(" \uD83C\uDF89 **[정답!]** 결과: **[" + resultStr + "]**\n" +
                         "배팅액: " + bet + " P\n" +
-                        "보상액: " + (bet * 2) + " P (원금 + 수익)\n" +
                         "현재 자산: **" + (myPoint + bet) + " P**").queue();
             } else {
-                // 졌을 때: 기존 자산에서 배팅액만큼 뺌
+                // 졌을 때
                 userPoints.put(nickname, myPoint - bet);
-
                 event.getChannel().sendMessage(" \uD83D\uDC80 **[실패!]** 결과: **[" + resultStr + "]**\n" +
                         "배팅액: " + bet + " P (손실)\n" +
                         "현재 자산: **" + (myPoint - bet) + " P**").queue();
@@ -465,36 +493,43 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
-            // 1. Map을 List로 변환하여 점수 순으로 정렬
+            // 1. Map을 List로 변환
             java.util.List<java.util.Map.Entry<String, Integer>> ranking = new java.util.ArrayList<>(userPoints.entrySet());
-            ranking.sort((o1, o2) -> o2.getValue().compareTo(o1.getValue())); // 높은 순 정렬
 
-            // 2. 상위 10명만 뽑아서 메시지 작성
+            // 2. [수정] 실제 잔고(포인트 - 빚)가 높은 순으로 정렬
+            ranking.sort((o1, o2) -> {
+                int balance1 = o1.getValue() - userDebt.getOrDefault(o1.getKey(), 0);
+                int balance2 = o2.getValue() - userDebt.getOrDefault(o2.getKey(), 0);
+                return Integer.compare(balance2, balance1); // 내림차순
+            });
+
+            // 3. 상위 10명 표시
             StringBuilder sb = new StringBuilder();
-            sb.append("\uD83C\uDFC6 **[종겜방 포인트 부자 랭킹 (Top 10)]**\n\n");
+            sb.append("\uD83C\uDFC6 **[종겜방 실제 잔고 랭킹 (Top 10)]**\n\n");
 
             for (int i = 0; i < Math.min(ranking.size(), 10); i++) {
                 java.util.Map.Entry<String, Integer> entry = ranking.get(i);
-                sb.append(String.format("%d등: **%s** - %d P\n", i + 1, entry.getKey(), entry.getValue()));
+                String name = entry.getKey();
+                int actualBalance = entry.getValue() - userDebt.getOrDefault(name, 0);
+
+                sb.append(String.format("%d등: **%s** - %d P\n", i + 1, name, actualBalance));
             }
 
             event.getChannel().sendMessage(sb.toString()).queue();
             return;
         }
         //선물하기
+        //선물하기
         if (message.startsWith("!선물")) {
 
-            // 1. 순수하게 "!선물"만 입력했거나 뒤에 아무것도 없는 경우
             if (message.trim().equals("!선물")) {
                 event.getChannel().sendMessage("사용법: `!선물 [받을사람] [금액]`").queue();
                 return;
             }
 
-            // 2. 이제 "!선물 " 이후의 내용을 안전하게 가져옵니다.
-            String content = message.substring(3).trim(); // "!선물" 뒤의 내용 추출
+            String content = message.substring(3).trim();
             int lastSpaceIndex = content.lastIndexOf(" ");
 
-            // 3. 닉네임과 금액을 나눌 공백이 없는 경우
             if (lastSpaceIndex == -1) {
                 event.getChannel().sendMessage("사용법: `!선물 [받을사람] [금액]`").queue();
                 return;
@@ -506,7 +541,11 @@ public class MessageListener extends ListenerAdapter {
 
             try {
                 int amount = Integer.parseInt(amountStr);
+
+                // [수정된 부분] 빚을 제외한 실제 잔고 계산
                 int senderPoints = userPoints.getOrDefault(senderName, 0);
+                int myDebt = userDebt.getOrDefault(senderName, 0);
+                int actualBalance = senderPoints - myDebt;
 
                 // 예외 처리
                 if (amount <= 0) {
@@ -517,8 +556,10 @@ public class MessageListener extends ListenerAdapter {
                     event.getChannel().sendMessage("자기 자신에게는 선물할 수 없습니다!").queue();
                     return;
                 }
-                if (senderPoints < amount) {
-                    event.getChannel().sendMessage("포인트가 부족합니다! (현재 보유: " + senderPoints + " P)").queue();
+
+                // [수정된 부분] 보유 포인트 대신 실제 잔고와 비교
+                if (actualBalance < amount) {
+                    event.getChannel().sendMessage("포인트가 부족합니다! (현재 실제 잔고: " + actualBalance + " P, 빚: " + myDebt + " P)").queue();
                     return;
                 }
 
@@ -549,6 +590,66 @@ public class MessageListener extends ListenerAdapter {
                 event.getChannel().sendMessage("금액은 **숫자**로만 입력해주세요.").queue();
             }
         }
+        //대출
+        if (message.startsWith("!대출 ")) {
+            String amountStr = message.substring(4).trim();
+            int loanAmount;
+            try {
+                loanAmount = Integer.parseInt(amountStr);
+            } catch (NumberFormatException e) { return; }
 
+            if (loanAmount > 100) {
+                event.getChannel().sendMessage("대출은 최대 100 P까지 가능합니다!").queue();
+                return;
+            }
+
+            // [핵심] 이미 빚(혹은 마이너스 잔고)이 있다면 대출 불가
+            if (userDebt.containsKey(nickname)) {
+                event.getChannel().sendMessage("이미 대출 중입니다! 상환 후 이용해주세요.").queue();
+                return;
+            }
+
+            // 포인트 지급 & 빚 기록
+            userPoints.put(nickname, userPoints.getOrDefault(nickname, 0) + loanAmount);
+            userDebt.put(nickname, loanAmount); // 빚 저장
+            debtDeadline.put(nickname, LocalDate.now().plusDays(3)); // 3일 후 만기
+
+            // [저장 코드 추가]
+            DataManaGer.savePoints(userPoints);
+            DataManaGer.saveDebts(userDebt);
+            DataManaGer.saveDeadlines(debtDeadline);
+
+            event.getMember().modifyNickname("[빚쟁이] " + pureName).queue();
+            event.getChannel().sendMessage(loanAmount + " P가 대출되었습니다. 3일 안에 갚지 않으면 잔고가 **" + loanAmount + " P만큼 마이너스**됩니다!").queue();
+        }
+        //상환하기
+        if (message.equals("!상환")) {
+            int myDebt = userDebt.getOrDefault(nickname, 0);
+            int myPoints = userPoints.getOrDefault(nickname, 0);
+
+            if (myDebt == 0) {
+                event.getChannel().sendMessage("갚을 빚이 없습니다!").queue();
+                return;
+            }
+
+            if (myPoints < myDebt) {
+                event.getChannel().sendMessage("포인트가 부족합니다! 빚: " + myDebt + " P").queue();
+                return;
+            }
+
+            // 갚기 완료
+            userPoints.put(nickname, myPoints - myDebt);
+            userDebt.remove(nickname);
+            debtDeadline.remove(nickname);
+
+            // [저장 코드 추가]
+            DataManaGer.savePoints(userPoints);
+            DataManaGer.saveDebts(userDebt);
+            DataManaGer.saveDeadlines(debtDeadline);
+
+            // 칭호 제거 (간단하게 pureName으로 리셋)
+            event.getMember().modifyNickname(pureName).queue();
+            event.getChannel().sendMessage("✅ 빚을 모두 갚았습니다! 자유의 몸이 되셨군요.").queue();
+        }
     }
 }
