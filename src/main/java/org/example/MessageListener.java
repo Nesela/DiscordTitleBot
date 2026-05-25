@@ -121,6 +121,30 @@ public class MessageListener extends ListenerAdapter {
             }
         }
 
+        if (message.startsWith("!유저삭제 ")) {
+            // 관리자/서버주인 권한 확인
+            if (!event.getMember().isOwner() && !event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+                event.getChannel().sendMessage("서버 운영진만 사용할 수 있습니다.").queue();
+                return;
+            }
+
+            String targetName = message.substring(6).trim(); // "!유저삭제 " 제외하고 이름 추출
+
+            // 1. 포인트 삭제
+            if (userPoints.containsKey(targetName)) {
+                userPoints.remove(targetName);
+                DataManaGer.savePoints(userPoints); // 포인트 파일 업데이트
+            }
+
+            // 2. 칭호 삭제
+            if (userTitles.containsKey(targetName)) {
+                userTitles.remove(targetName);
+                DataManaGer.saveTitles(userTitles); // 칭호 파일 업데이트
+            }
+
+            event.getChannel().sendMessage("✅ **" + targetName + "**님의 모든 데이터(포인트/칭호)가 삭제되었습니다.").queue();
+        }
+
         if (!isAdmin) {
             checkTitlse(event);
             // [중복 닉네임 로직 생략: 기존 코드의 도용 방지 로직을 여기에 배치하세요]
@@ -431,6 +455,29 @@ public class MessageListener extends ListenerAdapter {
             }
 
             DataManaGer.savePoints(userPoints);
+        }
+        //랭킹포인트
+        if (message.equals("!랭킹")) {
+            if (userPoints.isEmpty()) {
+                event.getChannel().sendMessage("아직 포인트 데이터가 없습니다!").queue();
+                return;
+            }
+
+            // 1. Map을 List로 변환하여 점수 순으로 정렬
+            java.util.List<java.util.Map.Entry<String, Integer>> ranking = new java.util.ArrayList<>(userPoints.entrySet());
+            ranking.sort((o1, o2) -> o2.getValue().compareTo(o1.getValue())); // 높은 순 정렬
+
+            // 2. 상위 10명만 뽑아서 메시지 작성
+            StringBuilder sb = new StringBuilder();
+            sb.append("\uD83C\uDFC6 **[종겜방 포인트 부자 랭킹 (Top 10)]**\n\n");
+
+            for (int i = 0; i < Math.min(ranking.size(), 10); i++) {
+                java.util.Map.Entry<String, Integer> entry = ranking.get(i);
+                sb.append(String.format("%d등: **%s** - %d P\n", i + 1, entry.getKey(), entry.getValue()));
+            }
+
+            event.getChannel().sendMessage(sb.toString()).queue();
+            return;
         }
 
     }
