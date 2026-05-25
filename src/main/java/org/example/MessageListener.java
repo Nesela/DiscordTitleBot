@@ -91,7 +91,7 @@ public class MessageListener extends ListenerAdapter {
             event.getMember().modifyNickname("[노예] " + pureName).queue();
             event.getChannel().sendMessage("⛓️ **[" + pureName + "]**님의 대출 만기일이 지나 모든 자산이 압류되었습니다. 현재 잔고: **" + (points - debt) + " P**").queue();
 
-            DataManaGer.savePoints(userPoints);
+            DataManaGer.savePoints(userPoints, event.getGuild());
         }
     }
 
@@ -143,7 +143,7 @@ public class MessageListener extends ListenerAdapter {
                 // userId를 키로 사용하여 저장
                 int currentPoints = userPoints.getOrDefault(targetUserId, 0);
                 userPoints.put(targetUserId, currentPoints + amount);
-                DataManaGer.savePoints(userPoints);
+                DataManaGer.savePoints(userPoints, event.getGuild());
 
                 event.getChannel().sendMessage(" **[" + targetName + "]**님께 **" + amount + " P** 지급 완료!").queue();
 
@@ -180,7 +180,7 @@ public class MessageListener extends ListenerAdapter {
             userDebt.remove(targetUserId);
             debtDeadline.remove(targetUserId);
 
-            DataManaGer.savePoints(userPoints);
+            DataManaGer.savePoints(userPoints, event.getGuild());
             DataManaGer.saveTitles(userTitles);
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
@@ -265,7 +265,7 @@ public class MessageListener extends ListenerAdapter {
             int currentPoint = userPoints.getOrDefault(userId, 0); // ID로 조회
             userPoints.put(userId, currentPoint + 15 + bonus); // ID로 저장
             lastCheckInDates.put(userId, today);
-            DataManaGer.savePoints(userPoints);
+            DataManaGer.savePoints(userPoints, event.getGuild());
 
             event.getChannel().sendMessage(msg).queue();
             return;
@@ -317,7 +317,7 @@ public class MessageListener extends ListenerAdapter {
             userTitles.put(userId, currentData.isEmpty() ? choice + "|" + getExpirationDate(14) : currentData + "," + choice + "|" + getExpirationDate(14));
             userPoints.put(userId, myPoint - publicTitlePrice);
 
-            DataManaGer.savePoints(userPoints);
+            DataManaGer.savePoints(userPoints, event.getGuild());
             DataManaGer.saveTitles(userTitles);
             event.getChannel().sendMessage(" **[" + pureName + "]**님이 공용 칭호 **[" + choice + "]**를 구매하셨습니다.").queue();
         }
@@ -347,7 +347,7 @@ public class MessageListener extends ListenerAdapter {
             userTitles.put(userId, currentData.isEmpty() ? newEntry : currentData + "," + newEntry);
             userPoints.put(userId, myPoint - customTitlePrice);
 
-            DataManaGer.savePoints(userPoints);
+            DataManaGer.savePoints(userPoints, event.getGuild());
             DataManaGer.saveTitles(userTitles);
 
             if (!event.getMember().isOwner()) {
@@ -467,7 +467,7 @@ public class MessageListener extends ListenerAdapter {
                         "배팅액: " + bet + " P\n" +
                         "현재 자산: **" + (myPoint - bet) + " P**").queue();
             }
-            DataManaGer.savePoints(userPoints);
+            DataManaGer.savePoints(userPoints, event.getGuild());
         }
         //랭킹포인트
         if (message.equals("!랭킹")) {
@@ -545,7 +545,7 @@ public class MessageListener extends ListenerAdapter {
 
                 userPoints.put(senderId, senderPoints - amount);
                 userPoints.put(receiverId, userPoints.getOrDefault(receiverId, 0) + amount);
-                DataManaGer.savePoints(userPoints);
+                DataManaGer.savePoints(userPoints, event.getGuild());
 
                 event.getChannel().sendMessage("🎁 **" + pureName + "**님이 **" + receiverName + "**님에게 **" + amount + " P**를 선물했습니다!").queue();
             } catch (NumberFormatException e) {
@@ -558,6 +558,12 @@ public class MessageListener extends ListenerAdapter {
             userId = event.getAuthor().getId();
             if (message.trim().equals("!대출")) {
                 event.getChannel().sendMessage("사용법: `!대출 [금액]`을 입력해주세요. (최대 100 P)").queue();
+                return;
+            }
+
+            boolean isStaff = event.getMember().hasPermission(Permission.ADMINISTRATOR);
+            if (isStaff) {
+                event.getChannel().sendMessage("⚠️ 운영자는 대출 기능을 사용할 수 없습니다.").queue();
                 return;
             }
 
@@ -585,24 +591,25 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
-            int currentPoints = userPoints.getOrDefault(userId, 0); // ID로 조회
-            userPoints.put(userId, currentPoints + loanAmount); // ID로 저장
+            int currentPoints = userPoints.getOrDefault(userId, 0);
+            userPoints.put(userId, currentPoints + loanAmount);
             userDebt.put(userId, loanAmount);
             debtDeadline.put(userId, LocalDate.now().plusDays(3));
 
-            DataManaGer.savePoints(userPoints);
+            DataManaGer.savePoints(userPoints, event.getGuild()); // 확실하게 저장
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
 
             event.getMember().modifyNickname("[빚쟁이] " + pureName).queue();
-            event.getChannel().sendMessage("💰 **" + loanAmount + " P**가 대출되었습니다!").queue();
+            event.getChannel().sendMessage("💰 **" + loanAmount + " P**가 대출되었습니다! (3일 이내에 상환하세요)").queue();
         }
 
 // 상환하기
+        // 상환하기
         if (message.startsWith("!상환")) {
             String targetUserId = userId; // 기본은 자기 자신
 
-            // 1. 운영진이 다른 사람의 빚을 대신 상환해주고 싶을 때 (예: !상환 @닉네임)
+            // 1. 운영진이 다른 사람의 빚을 대신 상환해주고 싶을 때
             boolean isStaff = event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR);
             if (isStaff && message.contains(" ")) {
                 String targetName = message.substring(3).trim();
@@ -625,7 +632,8 @@ public class MessageListener extends ListenerAdapter {
             }
 
             if (myPoints < myDebt) {
-                event.getChannel().sendMessage("❌ 포인트가 부족하여 상환할 수 없습니다.\n현재 보유 포인트: **" + myPoints + " P** / 상환 필요 금액: **" + myDebt + " P**").queue();
+                // [수정됨] 포인트가 부족할 때도 현재 남은 빚이 얼마인지 보여줍니다.
+                event.getChannel().sendMessage("❌ 포인트가 부족합니다.\n현재 보유: **" + myPoints + " P** / 남은 빚: **" + myDebt + " P**").queue();
                 return;
             }
 
@@ -634,7 +642,7 @@ public class MessageListener extends ListenerAdapter {
             userDebt.remove(targetUserId);
             debtDeadline.remove(targetUserId);
 
-            DataManaGer.savePoints(userPoints);
+            DataManaGer.savePoints(userPoints, event.getGuild());
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
 
@@ -648,6 +656,7 @@ public class MessageListener extends ListenerAdapter {
                 event.getMember().modifyNickname(targetNickname).queue();
             }
 
+            // [수정됨] 상환 완료 메시지에 갚은 액수를 명시합니다.
             event.getChannel().sendMessage("✅ 상환 완료! 빚 **" + myDebt + " P**를 모두 갚았습니다. 자유의 몸이 되셨군요!").queue();
         }
     }

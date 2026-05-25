@@ -21,19 +21,26 @@ public class DataManaGer {
         return map;
     }
 
-    public static void savePoints(HashMap<String, Integer> points) {
-        // 1. 저장 전에 시트의 해당 범위를 싹 비웁니다!
+    public static void savePoints(HashMap<String, Integer> points, net.dv8tion.jda.api.entities.Guild guild) {
         try {
-            GoogleSheetService.clearValues("시트1!A2:B100");
+            GoogleSheetService.clearValues("시트1!A2:C100"); // 닉네임까지 넣을 거니 C열까지 비웁니다
         } catch (Exception e) { e.printStackTrace(); }
 
-        // 2. 그 다음 데이터를 다시 씁니다.
         List<List<Object>> values = new ArrayList<>();
         for (Map.Entry<String, Integer> entry : points.entrySet()) {
-            values.add(Arrays.asList(entry.getKey(), entry.getValue()));
+            String userId = entry.getKey();
+            int point = entry.getValue();
+
+            // 1. 길드(서버) 정보를 통해 ID로 멤버를 찾습니다.
+            net.dv8tion.jda.api.entities.Member member = guild.getMemberById(userId);
+            String nickname = (member != null) ? member.getEffectiveName() : "알수없음";
+
+            // 2. 이제 [닉네임, ID, 포인트] 순서로 저장합니다.
+            values.add(Arrays.asList(nickname, userId, point));
         }
+
         try {
-            GoogleSheetService.updateValues("시트1!A2:B", values);
+            GoogleSheetService.updateValues("시트1!A2:C", values);
         } catch (Exception e) { e.printStackTrace(); }
     }
 
