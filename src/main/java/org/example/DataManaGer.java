@@ -22,28 +22,20 @@ public class DataManaGer {
     }
 
     public static void savePoints(HashMap<String, Integer> points, net.dv8tion.jda.api.entities.Guild guild) {
-        if (points == null || points.isEmpty()) {
-            System.out.println("⚠️ 데이터가 비어있어 저장을 건너뜁니다.");
-            return;
-        }
+        if (points == null) return;
 
         try {
-            // 1. ID와 포인트가 위치한 A열, B열만 정확히 초기화
-            GoogleSheetService.clearValues("시트1!A2:B100");
+            // [삭제] GoogleSheetService.clearValues("시트1!A2:B100"); // 이 줄을 삭제!
 
-            // 2. 데이터 준비 (A열: ID, B열: 포인트)
             List<List<Object>> values = new ArrayList<>();
             for (Map.Entry<String, Integer> entry : points.entrySet()) {
-                String userId = entry.getKey();
-                int point = entry.getValue();
-
-                // 데이터 일관성을 위해 [ID, 포인트] 순서로 저장
-                values.add(Arrays.asList(userId, point));
+                values.add(Arrays.asList(entry.getKey(), entry.getValue()));
             }
 
-            // 3. 업데이트 (A열부터 B열까지 기록)
-            GoogleSheetService.updateValues("시트1!A2:B", values);
-
+            // [변경] 데이터가 있을 때만 업데이트
+            if (!values.isEmpty()) {
+                GoogleSheetService.updateValues("시트1!A2:B", values);
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
