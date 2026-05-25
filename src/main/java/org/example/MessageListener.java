@@ -104,7 +104,7 @@ public class MessageListener extends ListenerAdapter {
         String message = event.getMessage().getContentRaw();
         String currentNickname = event.getMember().getEffectiveName();
         String pureName = currentNickname.replaceAll("\\[.*?\\]", "").trim();
-        String nickname = pureName; //
+        String nickname = pureName;
 
         boolean isAdmin = event.getMember() != null && event.getMember().hasPermission(Permission.ADMINISTRATOR);
 
@@ -189,23 +189,27 @@ public class MessageListener extends ListenerAdapter {
             }
         }
 
-        //별명변겅으로 인한 칭호 검사
+        //별명변경으로 인한 칭호 검사
         if (!isAdmin) {
             if (currentNickname.contains("[") && currentNickname.contains("]")) {
 
                 String tagInNickname = currentNickname.substring(currentNickname.indexOf("[") + 1, currentNickname.indexOf("]"));
 
+                // [수정] 빚쟁이 태그는 검거 대상에서 제외합니다!
+                if (tagInNickname.equals("빚쟁이")) {
+                    return;
+                }
+
                 if (realTitle == null || !realTitle.contains(tagInNickname)) {
+                    // ... (기존 검거 로직 동일)
                     String targetNickname;
                     String alertMessage;
 
                     if (realTitle != null && !realTitle.isEmpty()) {
-                        // 가방에 있는것중 첫번째 칭호로 복구
                         String firstTitle = realTitle.split(",")[0].split("\\|")[0];
                         targetNickname = "[" + firstTitle + "] " + pureName;
                         alertMessage = " **[" + pureName + "]**님, 구매하지 않은 칭호를 도용하셨습니다! 보유 중인 진짜 칭호 **[" + firstTitle + "]**로 변경됩니다.";
                     } else {
-                        //칭호가 없을경우 원래별명으로 변경
                         targetNickname = pureName;
                         alertMessage = " **[" + pureName + "]**님, 구매하지 않은 칭호를 무단 도용하여 닉네임이 강제 리셋되었습니다! 칭호는 상점에서 구매해 주세요.";
                     }
@@ -215,7 +219,6 @@ public class MessageListener extends ListenerAdapter {
                     }
                     event.getChannel().sendMessage(alertMessage).queue();
                     return;
-
                 }
             }
         }
@@ -599,14 +602,28 @@ public class MessageListener extends ListenerAdapter {
             }
         }
         //대출
-        if (message.startsWith("!대출 ")) {
+        if (message.startsWith("!대출")) { // !대출 100 처럼 뒤에 공백이 있을 때
+            // [추가] 명령어만 입력하고 뒤에 아무것도 없을 때 처리
+            if (message.trim().equals("!대출")) {
+                event.getChannel().sendMessage("사용법: `!대출 [금액]`을 입력해주세요. (최대 100 P)").queue();
+                return;
+            }
+
+            if (currentNickname.contains("[빚쟁이]")) {
+                event.getChannel().sendMessage("이미 대출 중이라 [빚쟁이] 상태입니다!").queue();
+                return;
+            }
+
             String amountStr = message.substring(4).trim();
             int loanAmount;
             try {
                 loanAmount = Integer.parseInt(amountStr);
-            } catch (NumberFormatException e) { return; }
+            } catch (NumberFormatException e) {
+                event.getChannel().sendMessage("금액은 숫자로만 입력해주세요!").queue();
+                return;
+            }
 
-            // 1. 음수 대출 방지 및 상한 확인
+            // [기존 로직들...]
             if (loanAmount <= 0) {
                 event.getChannel().sendMessage("❌ 1보다 큰 금액만 대출할 수 있습니다.").queue();
                 return;
@@ -616,27 +633,25 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
-            // 2. 이미 빚이 있는지 확인
             if (userDebt.containsKey(nickname)) {
                 event.getChannel().sendMessage("❌ 이미 대출 중입니다! 상환 후 이용해주세요.").queue();
                 return;
             }
 
-            // 3. 포인트 갱신 (핵심!)
+            // ... 이하 동일 (포인트 지급 및 저장 로직)
             int currentPoints = userPoints.getOrDefault(nickname, 0);
-            userPoints.put(nickname, currentPoints + loanAmount); // 포인트 추가
+            int newTotal = currentPoints + loanAmount;
 
-            // 4. 빚 & 만기일 기록
+            userPoints.put(nickname, newTotal);
             userDebt.put(nickname, loanAmount);
             debtDeadline.put(nickname, LocalDate.now().plusDays(3));
 
-            // 5. [중요] 모든 데이터 저장
             DataManaGer.savePoints(userPoints);
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
 
             event.getMember().modifyNickname("[빚쟁이] " + pureName).queue();
-            event.getChannel().sendMessage("💰 **" + loanAmount + " P**가 대출되었습니다. 3일 안에 갚지 않으면 압류됩니다! 현재 잔고: **" + (currentPoints + loanAmount) + " P**").queue();
+            event.getChannel().sendMessage("💰 **" + loanAmount + " P**가 대출되었습니다!").queue();
         }
         //상환하기
         if (message.equals("!상환")) {
@@ -663,9 +678,24 @@ public class MessageListener extends ListenerAdapter {
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
 
-            // 칭호 제거 (간단하게 pureName으로 리셋)
-            event.getMember().modifyNickname(pureName).queue();
-            event.getChannel().sendMessage("✅ 빚을 모두 갚았습니다! 자유의 몸이 되셨군요.").queue();
+            String currentTitles = userTitles.getOrDefault(nickname, "");
+            String targetNickname;
+
+            if (!currentTitles.isEmpty()) {
+                // 가방에서 첫 번째 칭호를 가져와 복구
+                String firstTitle = currentTitles.split(",")[0].split("\\|")[0];
+                targetNickname = "[" + firstTitle + "] " + pureName;
+            } else {
+                // 보유한 칭호가 없으면 그냥 원래 이름으로
+                targetNickname = pureName;
+            }
+
+            // 3. 닉네임 변경 및 완료 메시지
+            if (!event.getMember().isOwner()) {
+                event.getMember().modifyNickname(targetNickname).queue();
+            }
+            event.getChannel().sendMessage("✅ 빚을 모두 갚았습니다! 자유의 몸이 되셨군요. 칭호를 **" + targetNickname + "**(으)로 복구했습니다.").queue();
         }
+
     }
 }
