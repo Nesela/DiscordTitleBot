@@ -659,84 +659,54 @@ public class MessageListener extends ListenerAdapter {
             int debt = userDebt.get(userId);
             int myPoint = userPoints.getOrDefault(userId, 0);
 
-            // 2. 포인트가 빚보다 적든 많든 일단 차감
+            // 2. 포인트 계산 및 차감
             int newPoint = myPoint - debt;
             userPoints.put(userId, newPoint);
 
-            // 3. 빚 관련 데이터 모두 삭제
+            // 3. 칭호 복구를 위해 삭제 전에 기존 칭호 미리 백업
+            String originalTitle = userTitles.get(userId);
+
+            // 4. 빚 관련 데이터 삭제
             userDebt.remove(userId);
             debtDeadline.remove(userId);
-            userTitles.remove(userId);
 
-            // 4. 닉네임 처리
+            // 5. 닉네임 처리
             String cleanName = event.getMember().getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
 
-            // 5. [핵심] 마이너스면 노예, 아니면 칭호 복구 및 원래 이름으로 복구
+            // 6. 신분 및 닉네임 변경 (핵심 수정 구간)
             if (!event.getMember().isOwner()) {
                 if (newPoint < 0) {
+                    // [노예] 상태: 시트에 기록되도록 userTitles에 저장!
+                    userTitles.put(userId, "노예");
                     event.getMember().modifyNickname("[노예] " + cleanName).queue();
                 } else {
-                    // [추가] 빚을 갚고 마이너스가 아니면, 보유 중인 칭호 중 첫 번째 것을 자동으로 복구
-                    String myTitles = userTitles.get(userId); // 만약 이전에 삭제했다면 아래 로직을 위해 다시 가져오거나 변수 유지 필요
-                    // *주의: 위에서 이미 userTitles.remove(userId)를 했기 때문에 칭호가 사라집니다.*
-                    // 방장님 의도대로 '상환 시 칭호 초기화'라면 아래 코드는 불필요하지만,
-                    // '상환 후 칭호 복구'가 목적이라면 상환 로직에서 userTitles.remove를 신중히 해야 합니다.
+                    // 잔고가 0 이상: [노예] 상태에서 벗어남
+                    // 1. 만약 [노예]였던 상태라면 시트에서도 삭제
+                    if ("노예".equals(userTitles.get(userId))) {
+                        userTitles.remove(userId);
+                    }
 
-                    event.getMember().modifyNickname(cleanName).queue();
+                    // 2. 원래 칭호 복구 (이전 코드 활용)
+                    if (originalTitle != null && !originalTitle.isEmpty()) {
+                        event.getMember().modifyNickname("[" + originalTitle + "] " + cleanName).queue();
+                    } else {
+                        event.getMember().modifyNickname(cleanName).queue();
+                    }
                 }
             }
 
-            // 6. 시트 저장
+            // 7. 시트 저장 (이제 [노예]가 userTitles에 있으므로 시트에 확실히 등록됩니다!)
             DataManaGer.savePoints(userPoints, event.getGuild());
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
             DataManaGer.saveTitles(userTitles);
 
-            // 7. 메시지 출력
+            // 8. 결과 메시지 출력
             if (newPoint < 0) {
                 event.getChannel().sendMessage("⛓️ 빚 " + debt + " P를 상환했지만, 잔고가 마이너스이므로 **[노예]** 신분이 됩니다. 현재 잔고: **" + newPoint + " P**").queue();
             } else {
-                event.getChannel().sendMessage("✅ 빚 " + debt + " P를 상환하여 [빚쟁이] 칭호를 제거했습니다! 현재 잔고: **" + newPoint + " P**").queue();
+                event.getChannel().sendMessage("✅ 빚 " + debt + " P를 성공적으로 상환했습니다! 현재 잔고: **" + newPoint + " P**").queue();
             }
         }
 
-        //시트비우기
-        if (message.startsWith("!시트비우기 ")) {
-            boolean isStaff = event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR);
-            if (!isStaff) {
-                event.getChannel().sendMessage("❌ 서버 운영진만 사용할 수 있습니다.").queue();
-                return;
-            }
-
-            String target = message.substring(7).trim();
-            if (!target.equals("확인")) {
-                event.getChannel().sendMessage("⚠️ 정말 모든 데이터를 삭제하시겠습니까? 닉네임의 [빚쟁이] 태그도 일괄 제거됩니다.\n맞다면 `!시트비우기 확인`을 입력하세요.").queue();
-                return;
-            }
-
-            // 1. 서버 내 모든 멤버의 닉네임에서 [빚쟁이] 제거 (닉네임 초기화)
-            for (net.dv8tion.jda.api.entities.Member member : event.getGuild().getMembers()) {
-                String currentName = member.getEffectiveName();
-                if (currentName.contains("[빚쟁이]")) {
-                    String cleanName = currentName.replaceAll("\\[.*?\\]", "").trim();
-                    member.modifyNickname(cleanName).queue();
-                }
-            }
-
-            // 2. 메모리(HashMap) 초기화
-            userPoints.clear();
-            userTitles.clear();
-            userDebt.clear();
-            debtDeadline.clear();
-
-            // 3. 구글 시트 초기화
-            try {
-                GoogleSheetService.clearValues("시트1!A2:H100");
-                event.getChannel().sendMessage("✅ 모든 데이터와 [빚쟁이] 닉네임이 초기화되었습니다!").queue();
-            } catch (Exception e) {
-                event.getChannel().sendMessage("⚠️ 시트 초기화 중 오류가 발생했습니다: " + e.getMessage()).queue();
-            }
-        }
-    }
-
-}
+}}

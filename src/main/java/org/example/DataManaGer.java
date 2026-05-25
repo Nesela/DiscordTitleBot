@@ -60,10 +60,22 @@ public class DataManaGer {
     public static void saveTitles(HashMap<String, String> titles) {
         if (titles == null || titles.isEmpty()) return;
         List<List<Object>> values = new ArrayList<>();
-        for (Map.Entry<String, String> entry : titles.entrySet()) values.add(Arrays.asList(entry.getKey(), entry.getValue()));
+        for (Map.Entry<String, String> entry : titles.entrySet()) {
+            // [핵심] 대괄호가 포함된 칭호를 텍스트로 명확히 처리
+            String title = entry.getValue();
+            if (!title.startsWith("[")) title = "[" + title + "]"; // 대괄호 강제 포함
+
+            // 시트에서 수식으로 오해하지 않게 ' (작은따옴표)를 앞에 붙여 저장
+            values.add(Arrays.asList(entry.getKey(), "'" + title));
+        }
+
         try {
+            // 기존 데이터를 싹 지우고 새로 쓰도록 호출 (영역을 확실하게)
             GoogleSheetService.updateValues("시트1!D2:E", values);
-        } catch (Exception e) { e.printStackTrace(); }
+        } catch (Exception e) {
+            System.out.println("칭호 저장 실패: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     // 빚 로드
