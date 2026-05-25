@@ -23,22 +23,13 @@ public class DataManaGer {
 
     public static void savePoints(HashMap<String, Integer> points, net.dv8tion.jda.api.entities.Guild guild) {
         if (points == null) return;
-
-        try {
-            // [삭제] GoogleSheetService.clearValues("시트1!A2:B100"); // 이 줄을 삭제!
-
-            List<List<Object>> values = new ArrayList<>();
-            for (Map.Entry<String, Integer> entry : points.entrySet()) {
-                values.add(Arrays.asList(entry.getKey(), entry.getValue()));
-            }
-
-            // [변경] 데이터가 있을 때만 업데이트
-            if (!values.isEmpty()) {
-                GoogleSheetService.updateValues("시트1!A2:B", values);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
+        List<List<Object>> values = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : points.entrySet()) {
+            values.add(Arrays.asList(entry.getKey(), entry.getValue()));
         }
+        try {
+            if (!values.isEmpty()) GoogleSheetService.updateValues("시트1!A2:B", values);
+        } catch (Exception e) { e.printStackTrace(); }
     }
 
     // --- 칭호 로직 ---
@@ -64,9 +55,7 @@ public class DataManaGer {
             values.add(Arrays.asList(entry.getKey(), entry.getValue()));
         }
         try {
-            // [추가] 칭호 영역 초기화
-            GoogleSheetService.clearValues("시트1!C2:D100");
-            GoogleSheetService.updateValues("시트1!C2:D", values);
+            if (!values.isEmpty()) GoogleSheetService.updateValues("시트1!C2:D", values);
         } catch (Exception e) { e.printStackTrace(); }
     }
 
@@ -93,9 +82,7 @@ public class DataManaGer {
             values.add(Arrays.asList(entry.getKey(), entry.getValue()));
         }
         try {
-            // [추가] 빚 영역 초기화
-            GoogleSheetService.clearValues("시트1!E2:F100");
-            GoogleSheetService.updateValues("시트1!E2:F", values);
+            if (!values.isEmpty()) GoogleSheetService.updateValues("시트1!E2:F", values);
         } catch (Exception e) { e.printStackTrace(); }
     }
 
@@ -122,8 +109,7 @@ public class DataManaGer {
             values.add(Arrays.asList(entry.getKey(), entry.getValue().toString()));
         }
         try {
-            GoogleSheetService.clearValues("시트1!G2:H100");
-            GoogleSheetService.updateValues("시트1!G2:H", values);
+            if (!values.isEmpty()) GoogleSheetService.updateValues("시트1!G2:H", values);
         } catch (Exception e) { e.printStackTrace(); }
     }
 }

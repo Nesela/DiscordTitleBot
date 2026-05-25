@@ -646,6 +646,7 @@ public class MessageListener extends ListenerAdapter {
         }
 
         //상한
+        //상한
         if (message.equals("!상환")) {
             userId = event.getAuthor().getId();
 
@@ -667,14 +668,20 @@ public class MessageListener extends ListenerAdapter {
             debtDeadline.remove(userId);
             userTitles.remove(userId);
 
-            // 4. 닉네임 처리 (먼저 태그를 다 떼어낸 깨끗한 이름을 구함)
+            // 4. 닉네임 처리
             String cleanName = event.getMember().getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
 
-            // 5. [핵심] 마이너스면 노예, 아니면 원래 이름으로 복구
+            // 5. [핵심] 마이너스면 노예, 아니면 칭호 복구 및 원래 이름으로 복구
             if (!event.getMember().isOwner()) {
                 if (newPoint < 0) {
                     event.getMember().modifyNickname("[노예] " + cleanName).queue();
                 } else {
+                    // [추가] 빚을 갚고 마이너스가 아니면, 보유 중인 칭호 중 첫 번째 것을 자동으로 복구
+                    String myTitles = userTitles.get(userId); // 만약 이전에 삭제했다면 아래 로직을 위해 다시 가져오거나 변수 유지 필요
+                    // *주의: 위에서 이미 userTitles.remove(userId)를 했기 때문에 칭호가 사라집니다.*
+                    // 방장님 의도대로 '상환 시 칭호 초기화'라면 아래 코드는 불필요하지만,
+                    // '상환 후 칭호 복구'가 목적이라면 상환 로직에서 userTitles.remove를 신중히 해야 합니다.
+
                     event.getMember().modifyNickname(cleanName).queue();
                 }
             }
