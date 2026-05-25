@@ -650,33 +650,39 @@ public class MessageListener extends ListenerAdapter {
             event.getChannel().sendMessage("✅ 빚 " + debt + " P를 상환하여 [빚쟁이] 칭호를 제거했습니다!").queue();
         }
         if (message.startsWith("!시트비우기 ")) {
-            // [수정] 방장(Owner) OR 관리자(Administrator) 권한 체크
             boolean isStaff = event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR);
-
             if (!isStaff) {
-                event.getChannel().sendMessage("❌ 서버 운영진(방장/관리자)만 사용할 수 있습니다.").queue();
+                event.getChannel().sendMessage("❌ 서버 운영진만 사용할 수 있습니다.").queue();
                 return;
             }
 
-            // 2. 명령어 확인용 (오타 방지)
             String target = message.substring(7).trim();
             if (!target.equals("확인")) {
-                event.getChannel().sendMessage("⚠️ 정말 모든 데이터를 삭제하시겠습니까?\n맞다면 `!시트비우기 확인`을 입력하세요.").queue();
+                event.getChannel().sendMessage("⚠️ 정말 모든 데이터를 삭제하시겠습니까? 닉네임의 [빚쟁이] 태그도 일괄 제거됩니다.\n맞다면 `!시트비우기 확인`을 입력하세요.").queue();
                 return;
             }
 
-            // 3. 모든 데이터 초기화
+            // 1. 서버 내 모든 멤버의 닉네임에서 [빚쟁이] 제거 (닉네임 초기화)
+            for (net.dv8tion.jda.api.entities.Member member : event.getGuild().getMembers()) {
+                String currentName = member.getEffectiveName();
+                if (currentName.contains("[빚쟁이]")) {
+                    String cleanName = currentName.replaceAll("\\[.*?\\]", "").trim();
+                    member.modifyNickname(cleanName).queue();
+                }
+            }
+
+            // 2. 메모리(HashMap) 초기화
             userPoints.clear();
             userTitles.clear();
             userDebt.clear();
             debtDeadline.clear();
 
-            // 4. 시트 비우기 (중요: 시트의 모든 영역을 깨끗하게 비웁니다)
+            // 3. 구글 시트 초기화
             try {
                 GoogleSheetService.clearValues("시트1!A2:H100");
-                event.getChannel().sendMessage("✅ 운영진 명령으로 모든 데이터가 초기화되었습니다!").queue();
+                event.getChannel().sendMessage("✅ 모든 데이터와 [빚쟁이] 닉네임이 초기화되었습니다!").queue();
             } catch (Exception e) {
-                event.getChannel().sendMessage("⚠️ 시트 초기화 중 오류가 발생했으나 메모리는 비웠습니다: " + e.getMessage()).queue();
+                event.getChannel().sendMessage("⚠️ 시트 초기화 중 오류가 발생했습니다: " + e.getMessage()).queue();
             }
         }
     }
