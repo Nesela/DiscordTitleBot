@@ -353,36 +353,52 @@ public class MessageListener extends ListenerAdapter {
         // 수제작 칭호
         if (message.startsWith("!칭호제작 ")) {
             userId = event.getAuthor().getId();
-            int myPoint = userPoints.getOrDefault(userId, 0); // ID로 조회
+
+            // 1. 여기서 pureName을 딱 한 번만 정의함
+            String currentName = event.getMember().getEffectiveName();
+            pureName = currentName.replaceAll("\\[.*?\\]", "").trim();
+
+            int myPoint = userPoints.getOrDefault(userId, 0);
             String customTitle = message.substring(6).trim();
 
+            // 1. 글자 수 제한
             if (customTitle.length() > 4) {
                 event.getChannel().sendMessage("수제작 칭호는 **최대 4글자**까지만 가능합니다!").queue();
                 return;
             }
 
+            // 2. [핵심] 마이너스 방지 로직 (포인트가 가격보다 적으면 아예 차단)
             if (myPoint < customTitlePrice) {
-                event.getChannel().sendMessage("포인트가 부족합니다!").queue();
+                event.getChannel().sendMessage("❌ 포인트가 부족합니다! (필요: " + customTitlePrice + " P, 보유: " + myPoint + " P)").queue();
                 return;
             }
 
+            // 3. 이미 보유한 칭호 체크
             String currentData = userTitles.getOrDefault(userId, "");
             if (currentData.contains(customTitle)) {
-                event.getChannel().sendMessage("이미 보유하고 있는 칭호입니다!").queue();
+                event.getChannel().sendMessage("❌ 이미 보유하고 있는 칭호입니다!").queue();
                 return;
             }
 
+            // 4. 데이터 업데이트 (포인트 차감 및 데이터 추가)
+            userPoints.put(userId, myPoint - customTitlePrice);
             String newEntry = customTitle + "|" + getExpirationDate(14);
             userTitles.put(userId, currentData.isEmpty() ? newEntry : currentData + "," + newEntry);
-            userPoints.put(userId, myPoint - customTitlePrice);
 
+            // 5. 시트 저장 (데이터 반영)
             DataManaGer.savePoints(userPoints, event.getGuild());
             DataManaGer.saveTitles(userTitles);
 
-            if (!event.getMember().isOwner()) {
-                event.getMember().modifyNickname("[" + customTitle + "] " + pureName).queue();
+            // 6. 닉네임 변경 (데이터 저장 완료 후 실행)
+            try {
+                if (!event.getMember().isOwner()) {
+                    event.getMember().modifyNickname("[" + customTitle + "] " + pureName).queue();
+                }
+            } catch (Exception e) {
+                System.out.println("닉네임 변경 실패: " + e.getMessage());
             }
-            event.getChannel().sendMessage(" **[" + pureName + "]**님의 장인 정신이 깃든 수제작 칭호가 완성되었습니다.").queue();
+
+            event.getChannel().sendMessage("✅ **" + pureName + "**님의 장인 정신이 깃든 **[" + customTitle + "]** 칭호가 완성되었습니다!").queue();
         }
 
 // 칭호교환
@@ -589,7 +605,7 @@ public class MessageListener extends ListenerAdapter {
                 userId = event.getAuthor().getId();
 
                 if (amount > 100) {
-                    event.getChannel().sendMessage("❌ 대출 한도를 초과했습니다! (최대 1,000 P까지 대출 가능)").queue();
+                    event.getChannel().sendMessage("❌ 대출 한도를 초과했습니다! (최대 1,00 P까지 대출 가능)").queue();
                     return; // 여기서 멈춤 (데이터 저장 안 함)
                 }
 
