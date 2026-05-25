@@ -1,115 +1,128 @@
 package org.example;
 
-import java.time.LocalDate;
 import java.util.*;
+import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.Member;
 
 public class DataManaGer {
 
-    // --- 포인트 로직 ---
+    // 로직을 단순화하여, 데이터를 가져올 때 null 체크를 확실하게 합니다.
     public static HashMap<String, Integer> loadPoints() {
         HashMap<String, Integer> map = new HashMap<>();
         try {
-            List<List<Object>> values = GoogleSheetService.getValues("시트1!A2:B100");
+            List<List<Object>> values = GoogleSheetService.getValues("시트1!A2:C100");
             if (values != null) {
                 for (List<Object> row : values) {
-                    if (row.size() >= 2) {
-                        map.put(row.get(0).toString(), Integer.parseInt(row.get(1).toString()));
+                    // size 체크를 3 이상으로 확실하게!
+                    if (row.size() >= 3 && row.get(0) != null && row.get(2) != null) {
+                        map.put(row.get(0).toString(), Integer.parseInt(row.get(2).toString()));
                     }
                 }
             }
-        } catch (Exception e) { e.printStackTrace(); }
+        } catch (Exception e) {
+            System.out.println("포인트 로드 중 에러: " + e.getMessage());
+        }
         return map;
     }
 
-    public static void savePoints(HashMap<String, Integer> points, net.dv8tion.jda.api.entities.Guild guild) {
-        if (points == null) return;
+    public static void savePoints(HashMap<String, Integer> points, Guild guild) {
+        if (points == null || points.isEmpty()) return;
         List<List<Object>> values = new ArrayList<>();
         for (Map.Entry<String, Integer> entry : points.entrySet()) {
-            values.add(Arrays.asList(entry.getKey(), entry.getValue()));
+            Member member = guild.getMemberById(entry.getKey());
+            String nickname = (member != null) ? member.getEffectiveName() : "알수없음";
+            values.add(Arrays.asList(entry.getKey(), nickname, entry.getValue()));
         }
         try {
-            if (!values.isEmpty()) GoogleSheetService.updateValues("시트1!A2:B", values);
-        } catch (Exception e) { e.printStackTrace(); }
+            GoogleSheetService.updateValues("시트1!A2:C", values);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
-    // --- 칭호 로직 ---
+    // 칭호 로드
     public static HashMap<String, String> loadTitles() {
         HashMap<String, String> map = new HashMap<>();
         try {
-            List<List<Object>> values = GoogleSheetService.getValues("시트1!C2:D100");
+            List<List<Object>> values = GoogleSheetService.getValues("시트1!D2:E100");
             if (values != null) {
                 for (List<Object> row : values) {
-                    if (row.size() >= 2) {
-                        map.put(row.get(0).toString(), row.get(1).toString());
+                    if (row.size() >= 2 && row.get(0) != null) {
+                        map.put(row.get(0).toString(), row.get(1) != null ? row.get(1).toString() : "");
                     }
                 }
             }
-        } catch (Exception e) { e.printStackTrace(); }
+        } catch (Exception e) { System.out.println("칭호 로드 에러: " + e.getMessage()); }
         return map;
     }
 
+    // 칭호 저장
     public static void saveTitles(HashMap<String, String> titles) {
-        if (titles == null) return;
+        if (titles == null || titles.isEmpty()) return;
         List<List<Object>> values = new ArrayList<>();
-        for (Map.Entry<String, String> entry : titles.entrySet()) {
-            values.add(Arrays.asList(entry.getKey(), entry.getValue()));
-        }
+        for (Map.Entry<String, String> entry : titles.entrySet()) values.add(Arrays.asList(entry.getKey(), entry.getValue()));
         try {
-            if (!values.isEmpty()) GoogleSheetService.updateValues("시트1!C2:D", values);
+            GoogleSheetService.updateValues("시트1!D2:E", values);
         } catch (Exception e) { e.printStackTrace(); }
     }
 
-    // --- 빚 및 만기일 로직 (시트 E:F에 저장하도록 세팅) ---
+    // 빚 로드
     public static HashMap<String, Integer> loadDebts() {
         HashMap<String, Integer> map = new HashMap<>();
         try {
-            List<List<Object>> values = GoogleSheetService.getValues("시트1!E2:F100");
+            List<List<Object>> values = GoogleSheetService.getValues("시트1!F2:G100");
             if (values != null) {
                 for (List<Object> row : values) {
-                    if (row.size() >= 2) {
+                    if (row.size() >= 2 && row.get(0) != null && row.get(1) != null) {
                         map.put(row.get(0).toString(), Integer.parseInt(row.get(1).toString()));
                     }
                 }
             }
-        } catch (Exception e) { e.printStackTrace(); }
+        } catch (Exception e) { System.out.println("빚 로드 에러: " + e.getMessage()); }
         return map;
     }
 
+    // 빚 저장
     public static void saveDebts(HashMap<String, Integer> debts) {
-        if (debts == null) return;
+        if (debts == null || debts.isEmpty()) return;
         List<List<Object>> values = new ArrayList<>();
-        for (Map.Entry<String, Integer> entry : debts.entrySet()) {
-            values.add(Arrays.asList(entry.getKey(), entry.getValue()));
-        }
+        for (Map.Entry<String, Integer> entry : debts.entrySet()) values.add(Arrays.asList(entry.getKey(), entry.getValue()));
         try {
-            if (!values.isEmpty()) GoogleSheetService.updateValues("시트1!E2:F", values);
+            GoogleSheetService.updateValues("시트1!F2:G", values);
         } catch (Exception e) { e.printStackTrace(); }
     }
 
-    // 만기일은 날짜이므로 toString()으로 저장하고 파싱해서 불러옵니다
+    // --- 만기일 (H:ID, I:만기일) ---
+    public static void saveDeadlines(HashMap<String, Long> deadlines) {
+        if (deadlines == null || deadlines.isEmpty()) return;
+        List<List<Object>> values = new ArrayList<>();
+        for (Map.Entry<String, Long> entry : deadlines.entrySet()) {
+            // [ID, 만기일] 순으로 저장
+            values.add(Arrays.asList(entry.getKey(), entry.getValue()));
+        }
+        try {
+            GoogleSheetService.updateValues("시트1!H2:I", values);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    // --- 만기일 (H:ID, I:만기일) 로드 ---
     public static HashMap<String, Long> loadDeadlines() {
         HashMap<String, Long> map = new HashMap<>();
         try {
-            List<List<Object>> values = GoogleSheetService.getValues("시트1!G2:H100");
+            List<List<Object>> values = GoogleSheetService.getValues("시트1!H2:I100");
             if (values != null) {
                 for (List<Object> row : values) {
-                    if (row.size() >= 2) {
+                    if (row.size() >= 2 && row.get(0) != null && row.get(1) != null) {
                         map.put(row.get(0).toString(), Long.parseLong(row.get(1).toString()));
                     }
                 }
             }
-        } catch (Exception e) { e.printStackTrace(); }
+        } catch (Exception e) {
+            System.out.println("만기일 로드 에러: " + e.getMessage());
+        }
         return map;
     }
 
-    public static void saveDeadlines(HashMap<String, Long> deadlines) {
-        if (deadlines == null) return;
-        List<List<Object>> values = new ArrayList<>();
-        for (Map.Entry<String, Long> entry : deadlines.entrySet()) {
-            values.add(Arrays.asList(entry.getKey(), entry.getValue().toString()));
-        }
-        try {
-            if (!values.isEmpty()) GoogleSheetService.updateValues("시트1!G2:H", values);
-        } catch (Exception e) { e.printStackTrace(); }
-    }
 }
+

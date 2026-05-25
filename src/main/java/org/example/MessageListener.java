@@ -540,7 +540,7 @@ public class MessageListener extends ListenerAdapter {
                 net.dv8tion.jda.api.entities.Member member = event.getGuild().getMemberById(targetId);
                 String name = (member != null) ? member.getEffectiveName() : "알 수 없음";
 
-                sb.append(String.format("%d등: **%s** - %d P\n", i + 1, name, actualBalance));
+                sb.append(String.format("%d등: **%s** %d P\n", i + 1, name, actualBalance));
             }
             event.getChannel().sendMessage(sb.toString()).queue();
             return;
