@@ -230,6 +230,9 @@ public class MessageListener extends ListenerAdapter {
                     "1. `!랭킹` : 현재 보유 포인트 랭킹을 확인합니다.\n" +
                     "1. `!선물` : 포인트의 선물이 가능합니다.\n" +
                     "1. `!홀짝 [홀/짝] [금액]` : 포인트의 2배를 노리는 도박 게임!\n\n" +
+                    "💸 **대출 & 상환**\n" +
+                    "6. `!대출 [금액]` : 최대 100 P까지 대출 (3일 이내 상환 필수!)\n" +
+                    "7. `!상환` : 빌린 빚을 상환합니다.\n\n" +
                     "🏷️ **칭호 시스템**\n" +
                     "\n 구매하신 칭호는 구매일로부터 14일 동안 사용하실 수 있습니다\n" +
                     "1. `!칭호교체 칭호이름` : 보유중인 칭호에서 교체가 가능합니다.\n" +
@@ -450,6 +453,12 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
+            // [추가된 핵심 보안 로직]
+            if (bet <= 0) {
+                event.getChannel().sendMessage(" ❌ **금액은 1 P 이상으로만 배팅 가능합니다!**").queue();
+                return;
+            }
+
             if (!choice.equals("홀") && !choice.equals("짝")) {
                 event.getChannel().sendMessage(" `홀` 또는 `짝` 중에서 선택해 주세요!").queue();
                 return;
@@ -598,29 +607,37 @@ public class MessageListener extends ListenerAdapter {
                 loanAmount = Integer.parseInt(amountStr);
             } catch (NumberFormatException e) { return; }
 
+            // 1. 음수 대출 방지 및 상한 확인
+            if (loanAmount <= 0) {
+                event.getChannel().sendMessage("❌ 1보다 큰 금액만 대출할 수 있습니다.").queue();
+                return;
+            }
             if (loanAmount > 100) {
-                event.getChannel().sendMessage("대출은 최대 100 P까지 가능합니다!").queue();
+                event.getChannel().sendMessage("⚠️ 대출은 최대 100 P까지 가능합니다!").queue();
                 return;
             }
 
-            // [핵심] 이미 빚(혹은 마이너스 잔고)이 있다면 대출 불가
+            // 2. 이미 빚이 있는지 확인
             if (userDebt.containsKey(nickname)) {
-                event.getChannel().sendMessage("이미 대출 중입니다! 상환 후 이용해주세요.").queue();
+                event.getChannel().sendMessage("❌ 이미 대출 중입니다! 상환 후 이용해주세요.").queue();
                 return;
             }
 
-            // 포인트 지급 & 빚 기록
-            userPoints.put(nickname, userPoints.getOrDefault(nickname, 0) + loanAmount);
-            userDebt.put(nickname, loanAmount); // 빚 저장
-            debtDeadline.put(nickname, LocalDate.now().plusDays(3)); // 3일 후 만기
+            // 3. 포인트 갱신 (핵심!)
+            int currentPoints = userPoints.getOrDefault(nickname, 0);
+            userPoints.put(nickname, currentPoints + loanAmount); // 포인트 추가
 
-            // [저장 코드 추가]
+            // 4. 빚 & 만기일 기록
+            userDebt.put(nickname, loanAmount);
+            debtDeadline.put(nickname, LocalDate.now().plusDays(3));
+
+            // 5. [중요] 모든 데이터 저장
             DataManaGer.savePoints(userPoints);
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
 
             event.getMember().modifyNickname("[빚쟁이] " + pureName).queue();
-            event.getChannel().sendMessage(loanAmount + " P가 대출되었습니다. 3일 안에 갚지 않으면 잔고가 **" + loanAmount + " P만큼 마이너스**됩니다!").queue();
+            event.getChannel().sendMessage("💰 **" + loanAmount + " P**가 대출되었습니다. 3일 안에 갚지 않으면 압류됩니다! 현재 잔고: **" + (currentPoints + loanAmount) + " P**").queue();
         }
         //상환하기
         if (message.equals("!상환")) {
