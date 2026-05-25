@@ -15,7 +15,7 @@ public class MessageListener extends ListenerAdapter {
     //칭호 저장소
     private HashMap<String, String> userTitles = DataManaGer.loadTitles();
     //마지막 출석체크 날짜
-    private HashMap<String, java.time.LocalDate> lastCheckInDates = new HashMap<>();
+    private HashMap<String, LocalDate> lastCheckInDates = new HashMap<>();
 
     private HashMap<String, Integer> userDebt = DataManaGer.loadDebts();
     private HashMap<String, LocalDate> debtDeadline = DataManaGer.loadDeadlines();
@@ -244,15 +244,16 @@ public class MessageListener extends ListenerAdapter {
         }
         //출석체크
         if (message.equals("!출첵")) {
+            String userId = event.getAuthor().getId(); // 유저의 고유 ID를 가져옵니다.
             java.time.LocalDate today = java.time.LocalDate.now();
-            java.time.LocalDate lastDate = lastCheckInDates.get(nickname);
+            java.time.LocalDate lastDate = lastCheckInDates.get(userId); // ID로 확인!
 
             if (lastDate != null && lastDate.equals(today)) {
                 event.getChannel().sendMessage(" **[" + chatName + "]**님, 출석체크는 **하루에 한 번**만 가능합니다! 내일 다시 와주세요.").queue();
                 return;
             }
 
-            // 1. 신규/기존 확인 후 포인트 계산
+            // 1. 포인트 계산 (기존 닉네임 키는 유지)
             int bonus = 0;
             String msg = " **[" + chatName + "]** 님이 출석체크를 완료하여 15포인트가 지급되었습니다.";
 
@@ -262,15 +263,14 @@ public class MessageListener extends ListenerAdapter {
             }
 
             int currentPoint = userPoints.getOrDefault(nickname, 0);
-            int newPoint = currentPoint + 15 + bonus; // 15(기본) + 보너스(신규일 때 105)
+            int newPoint = currentPoint + 15 + bonus;
 
             userPoints.put(nickname, newPoint);
-            lastCheckInDates.put(nickname, today);
+            lastCheckInDates.put(userId, today); // ID를 기준으로 날짜 저장!
             DataManaGer.savePoints(userPoints);
 
             event.getChannel().sendMessage(msg).queue();
-            return; // 로직 끝
-
+            return;
         }
         //포인트 확인
         if (message.equals("!포인트")) {
