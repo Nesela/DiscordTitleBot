@@ -14,7 +14,9 @@ public class MessageListener extends ListenerAdapter {
     private HashMap<String, Integer> userPoints = DataManaGer.loadPoints();
     private HashMap<String, String> userTitles = DataManaGer.loadTitles();
     private HashMap<String, Integer> userDebt = DataManaGer.loadDebts();
-    private HashMap<String, LocalDate> debtDeadline = DataManaGer.loadDeadlines();
+    private HashMap<String, Long> debtDeadline = DataManaGer.loadDeadlines();
+
+
 
     // 출석체크 기록도 저장되도록 나중에 DataManaGer에 추가하세요.
     private HashMap<String, LocalDate> lastCheckInDates = new HashMap<>();
@@ -77,7 +79,8 @@ public class MessageListener extends ListenerAdapter {
         }
 
         // 4. 만기일 확인도 userId로!
-        if (debtDeadline.containsKey(userId) && LocalDate.now().isAfter(debtDeadline.get(userId))) {
+        long now = System.currentTimeMillis();
+        if (debtDeadline.containsKey(userId) && now > debtDeadline.get(userId)) {
             int points = userPoints.getOrDefault(userId, 0);
             int debt = userDebt.get(userId);
 
@@ -497,11 +500,12 @@ public class MessageListener extends ListenerAdapter {
 
             for (int i = 0; i < Math.min(ranking.size(), 10); i++) {
                 java.util.Map.Entry<String, Integer> entry = ranking.get(i);
-                userId = event.getAuthor().getId();
-                int actualBalance = entry.getValue() - userDebt.getOrDefault(userId, 0);
+                String targetId = entry.getKey();
+
+                int actualBalance = entry.getValue() - userDebt.getOrDefault(targetId, 0);
 
                 // ID로 멤버를 찾아 닉네임을 표시 (없으면 ID 그대로 표시)
-                net.dv8tion.jda.api.entities.Member member = event.getGuild().getMemberById(entry.getKey()); // <-- 랭킹에 있는 각 유저의 ID를 가져와야 합니다.
+                net.dv8tion.jda.api.entities.Member member = event.getGuild().getMemberById(targetId);
                 String name = (member != null) ? member.getEffectiveName() : "알 수 없음";
 
                 sb.append(String.format("%d등: **%s** - %d P\n", i + 1, name, actualBalance));
@@ -561,111 +565,61 @@ public class MessageListener extends ListenerAdapter {
             }
         }
         //대출
-        // 대출
-        if (message.startsWith("!대출")) {
-            userId = event.getAuthor().getId();
-            if (message.trim().equals("!대출")) {
-                event.getChannel().sendMessage("사용법: `!대출 [금액]`을 입력해주세요. (최대 100 P)").queue();
-                return;
-            }
-
-            boolean isStaff = event.getMember().hasPermission(Permission.ADMINISTRATOR);
-            if (isStaff) {
-                event.getChannel().sendMessage("⚠️ 운영자는 대출 기능을 사용할 수 없습니다.").queue();
-                return;
-            }
-
-            if (currentNickname.contains("[빚쟁이]")) {
-                event.getChannel().sendMessage("이미 대출 중이라 [빚쟁이] 상태입니다!").queue();
-                return;
-            }
-
-            String amountStr = message.substring(4).trim();
-            int loanAmount;
+        if (message.startsWith("!대출 ")) {
             try {
-                loanAmount = Integer.parseInt(amountStr);
+                int amount = Integer.parseInt(message.substring(4).trim());
+                userId = event.getAuthor().getId();
+                String currentName = event.getMember().getEffectiveName();
+
+                // 1. 포인트 및 빚 업데이트
+                userPoints.put(userId, userPoints.getOrDefault(userId, 0) + amount);
+                userDebt.put(userId, userDebt.getOrDefault(userId, 0) + amount);
+                // 3일 뒤 마감 시간(밀리초) 저장
+                debtDeadline.put(userId, System.currentTimeMillis() + (3L * 24 * 60 * 60 * 1000));
+
+                // 2. 칭호 및 닉네임 처리
+                String newNickname = "[빚쟁이] " + currentName.replaceAll("\\[.*?\\]", "").trim();
+                event.getMember().modifyNickname(newNickname).queue();
+                userTitles.put(userId, "빚쟁이");
+
+                // 3. 데이터 저장
+                DataManaGer.savePoints(userPoints, event.getGuild());
+                DataManaGer.saveDebts(userDebt);
+                DataManaGer.saveDeadlines(debtDeadline);
+                DataManaGer.saveTitles(userTitles);
+
+                event.getChannel().sendMessage("💰 **" + amount + " P** 대출 완료! **[빚쟁이]**가 되셨습니다. 3일 안에 상환하세요!").queue();
             } catch (NumberFormatException e) {
-                event.getChannel().sendMessage("금액은 숫자로만 입력해주세요!").queue();
-                return;
+                event.getChannel().sendMessage("❌ 금액을 숫자로 입력해주세요!").queue();
+            } catch (Exception e) {
+                event.getChannel().sendMessage("❌ 대출 오류: " + e.getMessage()).queue();
             }
-
-            if (loanAmount <= 0 || loanAmount > 100) {
-                event.getChannel().sendMessage("❌ 1 P 이상, 최대 100 P까지 대출 가능합니다.").queue();
-                return;
-            }
-
-            if (userDebt.containsKey(userId)) { // ID로 확인
-                event.getChannel().sendMessage("❌ 이미 대출 중입니다! 상환 후 이용해주세요.").queue();
-                return;
-            }
-
-            int currentPoints = userPoints.getOrDefault(userId, 0);
-            userPoints.put(userId, currentPoints + loanAmount);
-            userDebt.put(userId, loanAmount);
-            debtDeadline.put(userId, LocalDate.now().plusDays(3));
-
-            DataManaGer.savePoints(userPoints, event.getGuild()); // 확실하게 저장
-            DataManaGer.saveDebts(userDebt);
-            DataManaGer.saveDeadlines(debtDeadline);
-
-            event.getMember().modifyNickname("[빚쟁이] " + pureName).queue();
-            event.getChannel().sendMessage("💰 **" + loanAmount + " P**가 대출되었습니다! (3일 이내에 상환하세요)").queue();
         }
-
-// 상환하기
-        // 상환하기
-        if (message.startsWith("!상환")) {
-            String targetUserId = userId; // 기본은 자기 자신
-
-            // 1. 운영진이 다른 사람의 빚을 대신 상환해주고 싶을 때
-            boolean isStaff = event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR);
-            if (isStaff && message.contains(" ")) {
-                String targetName = message.substring(3).trim();
-                for (net.dv8tion.jda.api.entities.Member m : event.getGuild().getMembers()) {
-                    if (m.getEffectiveName().contains(targetName)) {
-                        targetUserId = m.getId();
-                        break;
-                    }
-                }
-            }
-
-            // 2. 빚 데이터 확인
-            int myDebt = userDebt.getOrDefault(targetUserId, 0);
-            int myPoints = userPoints.getOrDefault(targetUserId, 0);
-
-            // 3. 상환 처리
-            if (myDebt == 0) {
-                event.getChannel().sendMessage("✅ 갚을 빚이 없습니다! 깔끔한 경제 생활 응원합니다.").queue();
-                return;
-            }
-
-            if (myPoints < myDebt) {
-                // [수정됨] 포인트가 부족할 때도 현재 남은 빚이 얼마인지 보여줍니다.
-                event.getChannel().sendMessage("❌ 포인트가 부족합니다.\n현재 보유: **" + myPoints + " P** / 남은 빚: **" + myDebt + " P**").queue();
-                return;
-            }
-
-            // 4. 포인트 차감 및 빚 삭제
-            userPoints.put(targetUserId, myPoints - myDebt);
-            userDebt.remove(targetUserId);
-            debtDeadline.remove(targetUserId);
-
-            DataManaGer.savePoints(userPoints, event.getGuild());
-            DataManaGer.saveDebts(userDebt);
-            DataManaGer.saveDeadlines(debtDeadline);
-
-            // 5. 칭호 복구 로직
-            String currentTitles = userTitles.getOrDefault(targetUserId, "");
-            String targetNickname = (!currentTitles.isEmpty())
-                    ? "[" + currentTitles.split(",")[0].split("\\|")[0] + "] " + pureName
-                    : pureName;
-
+        if (message.startsWith("!시트비우기 ")) {
             if (!event.getMember().isOwner()) {
-                event.getMember().modifyNickname(targetNickname).queue();
+                event.getChannel().sendMessage("❌ 서버 방장만 사용할 수 있습니다.").queue();
+                return;
             }
 
-            // [수정됨] 상환 완료 메시지에 갚은 액수를 명시합니다.
-            event.getChannel().sendMessage("✅ 상환 완료! 빚 **" + myDebt + " P**를 모두 갚았습니다. 자유의 몸이 되셨군요!").queue();
+            String target = message.substring(7).trim();
+            if (!target.equals("확인")) {
+                event.getChannel().sendMessage("⚠️ 모든 데이터 삭제 확인: `!시트비우기 확인`을 입력하세요.").queue();
+                return;
+            }
+
+            // 1. 메모리 초기화
+            userPoints.clear();
+            userTitles.clear();
+            userDebt.clear();
+            debtDeadline.clear();
+
+            // 2. 시트 비우기 (try-catch로 감싸서 오류 방지)
+            try {
+                GoogleSheetService.clearValues("시트1!A2:H100");
+                event.getChannel().sendMessage("✅ 모든 데이터가 초기화되었습니다!").queue();
+            } catch (Exception e) {
+                // 에러가 나도 메모리는 이미 비웠으므로 봇은 계속 돌아갑니다.
+                event.getChannel().sendMessage("⚠️ 시트 초기화 중 오류가 발생했으나 메모리는 비웠습니다: " + e.getMessage()).queue();
+            }
         }
-    }
-}
+}}

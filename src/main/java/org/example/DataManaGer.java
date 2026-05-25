@@ -22,26 +22,35 @@ public class DataManaGer {
     }
 
     public static void savePoints(HashMap<String, Integer> points, net.dv8tion.jda.api.entities.Guild guild) {
-        try {
-            GoogleSheetService.clearValues("시트1!A2:C100"); // 닉네임까지 넣을 거니 C열까지 비웁니다
-        } catch (Exception e) { e.printStackTrace(); }
-
-        List<List<Object>> values = new ArrayList<>();
-        for (Map.Entry<String, Integer> entry : points.entrySet()) {
-            String userId = entry.getKey();
-            int point = entry.getValue();
-
-            // 1. 길드(서버) 정보를 통해 ID로 멤버를 찾습니다.
-            net.dv8tion.jda.api.entities.Member member = guild.getMemberById(userId);
-            String nickname = (member != null) ? member.getEffectiveName() : "알수없음";
-
-            // 2. 이제 [닉네임, ID, 포인트] 순서로 저장합니다.
-            values.add(Arrays.asList(nickname, userId, point));
+        // 1. 데이터 비어있으면 아예 저장을 안 함 (데이터 보호!)
+        if (points == null || points.isEmpty()) {
+            System.out.println("⚠️ 데이터가 비어있어 저장을 건너뜁니다.");
+            return;
         }
 
         try {
+            // 2. 구글 시트 지우기 (GoogleSheetService 클래스의 메서드 호출)
+            GoogleSheetService.clearValues("시트1!A2:C100");
+
+            // 3. 데이터 준비
+            List<List<Object>> values = new ArrayList<>();
+            for (Map.Entry<String, Integer> entry : points.entrySet()) {
+                String userId = entry.getKey();
+                int point = entry.getValue();
+
+                // 멤버 닉네임 가져오기
+                net.dv8tion.jda.api.entities.Member member = guild.getMemberById(userId);
+                String nickname = (member != null) ? member.getEffectiveName() : "알수없음";
+
+                values.add(Arrays.asList(nickname, userId, point));
+            }
+
+            // 4. 구글 시트에 업데이트 (GoogleSheetService 클래스의 메서드 호출)
             GoogleSheetService.updateValues("시트1!A2:C", values);
-        } catch (Exception e) { e.printStackTrace(); }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     // --- 칭호 로직 ---
@@ -97,14 +106,14 @@ public class DataManaGer {
     }
 
     // 만기일은 날짜이므로 toString()으로 저장하고 파싱해서 불러옵니다
-    public static HashMap<String, LocalDate> loadDeadlines() {
-        HashMap<String, LocalDate> map = new HashMap<>();
+    public static HashMap<String, Long> loadDeadlines() {
+        HashMap<String, Long> map = new HashMap<>();
         try {
             List<List<Object>> values = GoogleSheetService.getValues("시트1!G2:H100");
             if (values != null) {
                 for (List<Object> row : values) {
                     if (row.size() >= 2) {
-                        map.put(row.get(0).toString(), LocalDate.parse(row.get(1).toString()));
+                        map.put(row.get(0).toString(), Long.parseLong(row.get(1).toString()));
                     }
                 }
             }
@@ -112,12 +121,14 @@ public class DataManaGer {
         return map;
     }
 
-    public static void saveDeadlines(HashMap<String, LocalDate> deadlines) {
+    public static void saveDeadlines(HashMap<String, Long> deadlines) {
+        if (deadlines == null) return;
         List<List<Object>> values = new ArrayList<>();
-        for (Map.Entry<String, LocalDate> entry : deadlines.entrySet()) {
-            values.add(Arrays.asList(entry.getKey(), entry.toString()));
+        for (Map.Entry<String, Long> entry : deadlines.entrySet()) {
+            values.add(Arrays.asList(entry.getKey(), entry.getValue().toString()));
         }
         try {
+            GoogleSheetService.clearValues("시트1!G2:H100");
             GoogleSheetService.updateValues("시트1!G2:H", values);
         } catch (Exception e) { e.printStackTrace(); }
     }
