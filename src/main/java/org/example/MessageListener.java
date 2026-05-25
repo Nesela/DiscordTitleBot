@@ -645,6 +645,7 @@ public class MessageListener extends ListenerAdapter {
             }
         }
 
+        //상한
         if (message.equals("!상환")) {
             userId = event.getAuthor().getId();
 
@@ -657,28 +658,42 @@ public class MessageListener extends ListenerAdapter {
             int debt = userDebt.get(userId);
             int myPoint = userPoints.getOrDefault(userId, 0);
 
-            // 2. 포인트가 충분한지 확인
-            userPoints.put(userId, myPoint - debt);
+            // 2. 포인트가 빚보다 적든 많든 일단 차감
+            int newPoint = myPoint - debt;
+            userPoints.put(userId, newPoint);
+
+            // 3. 빚 관련 데이터 모두 삭제
             userDebt.remove(userId);
             debtDeadline.remove(userId);
             userTitles.remove(userId);
 
+            // 4. 닉네임 처리 (먼저 태그를 다 떼어낸 깨끗한 이름을 구함)
             String cleanName = event.getMember().getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
+
+            // 5. [핵심] 마이너스면 노예, 아니면 원래 이름으로 복구
             if (!event.getMember().isOwner()) {
-                event.getMember().modifyNickname(cleanName).queue();
+                if (newPoint < 0) {
+                    event.getMember().modifyNickname("[노예] " + cleanName).queue();
+                } else {
+                    event.getMember().modifyNickname(cleanName).queue();
+                }
             }
 
-            // 5. [핵심] 시트 동기화
+            // 6. 시트 저장
             DataManaGer.savePoints(userPoints, event.getGuild());
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
             DataManaGer.saveTitles(userTitles);
 
-            // 6. 결과 메시지 (마이너스 여부를 확인해서 보여줌)
-            int finalPoint = userPoints.get(userId);
-            event.getChannel().sendMessage("✅ 빚 " + debt + " P를 상환했습니다. 현재 잔고: **" + finalPoint + " P**").queue();
+            // 7. 메시지 출력
+            if (newPoint < 0) {
+                event.getChannel().sendMessage("⛓️ 빚 " + debt + " P를 상환했지만, 잔고가 마이너스이므로 **[노예]** 신분이 됩니다. 현재 잔고: **" + newPoint + " P**").queue();
+            } else {
+                event.getChannel().sendMessage("✅ 빚 " + debt + " P를 상환하여 [빚쟁이] 칭호를 제거했습니다! 현재 잔고: **" + newPoint + " P**").queue();
+            }
         }
 
+        //시트비우기
         if (message.startsWith("!시트비우기 ")) {
             boolean isStaff = event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR);
             if (!isStaff) {
