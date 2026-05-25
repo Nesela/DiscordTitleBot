@@ -436,7 +436,6 @@ public class MessageListener extends ListenerAdapter {
             event.getChannel().sendMessage(sb.toString()).queue();
         }
         //도박 홀짝
-        //도박 홀짝
         if (message.startsWith("!홀짝")) {
             String[] parts = message.split(" ");
             if (parts.length < 3) {

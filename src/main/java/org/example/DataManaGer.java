@@ -22,6 +22,12 @@ public class DataManaGer {
     }
 
     public static void savePoints(HashMap<String, Integer> points) {
+        // 1. 저장 전에 시트의 해당 범위를 싹 비웁니다!
+        try {
+            GoogleSheetService.clearValues("시트1!A2:B100");
+        } catch (Exception e) { e.printStackTrace(); }
+
+        // 2. 그 다음 데이터를 다시 씁니다.
         List<List<Object>> values = new ArrayList<>();
         for (Map.Entry<String, Integer> entry : points.entrySet()) {
             values.add(Arrays.asList(entry.getKey(), entry.getValue()));

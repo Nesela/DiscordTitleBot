@@ -16,6 +16,8 @@ import java.util.List;
 public class GoogleSheetService {
     private static final String SPREADSHEET_ID = "1fPcmdfE_5scHzh2mXhdtDGPzlpBybvkibHWNWeRViCY";
 
+
+
     public static Sheets getSheetsService() throws Exception {
         // 레일웨이에서 설정한 환경변수 GOOGLE_CREDENTIALS를 가져옵니다
         String jsonContent = System.getenv("GOOGLE_CREDENTIALS");
@@ -37,5 +39,8 @@ public class GoogleSheetService {
     public static void updateValues(String range, List<List<Object>> values) throws Exception {
         ValueRange body = new ValueRange().setValues(values);
         getSheetsService().spreadsheets().values().update(SPREADSHEET_ID, range, body).setValueInputOption("RAW").execute();
+    }
+    public static void clearValues(String range) throws Exception {
+        getSheetsService().spreadsheets().values().clear(SPREADSHEET_ID, range, null).execute();
     }
 }
