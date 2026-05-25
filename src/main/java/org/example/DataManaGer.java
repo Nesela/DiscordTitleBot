@@ -22,31 +22,27 @@ public class DataManaGer {
     }
 
     public static void savePoints(HashMap<String, Integer> points, net.dv8tion.jda.api.entities.Guild guild) {
-        // 1. 데이터 비어있으면 아예 저장을 안 함 (데이터 보호!)
         if (points == null || points.isEmpty()) {
             System.out.println("⚠️ 데이터가 비어있어 저장을 건너뜁니다.");
             return;
         }
 
         try {
-            // 2. 구글 시트 지우기 (GoogleSheetService 클래스의 메서드 호출)
-            GoogleSheetService.clearValues("시트1!A2:C100");
+            // 1. ID와 포인트가 위치한 A열, B열만 정확히 초기화
+            GoogleSheetService.clearValues("시트1!A2:B100");
 
-            // 3. 데이터 준비
+            // 2. 데이터 준비 (A열: ID, B열: 포인트)
             List<List<Object>> values = new ArrayList<>();
             for (Map.Entry<String, Integer> entry : points.entrySet()) {
                 String userId = entry.getKey();
                 int point = entry.getValue();
 
-                // 멤버 닉네임 가져오기
-                net.dv8tion.jda.api.entities.Member member = guild.getMemberById(userId);
-                String nickname = (member != null) ? member.getEffectiveName() : "알수없음";
-
-                values.add(Arrays.asList(nickname, userId, point));
+                // 데이터 일관성을 위해 [ID, 포인트] 순서로 저장
+                values.add(Arrays.asList(userId, point));
             }
 
-            // 4. 구글 시트에 업데이트 (GoogleSheetService 클래스의 메서드 호출)
-            GoogleSheetService.updateValues("시트1!A2:C", values);
+            // 3. 업데이트 (A열부터 B열까지 기록)
+            GoogleSheetService.updateValues("시트1!A2:B", values);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -70,11 +66,14 @@ public class DataManaGer {
     }
 
     public static void saveTitles(HashMap<String, String> titles) {
+        if (titles == null) return;
         List<List<Object>> values = new ArrayList<>();
         for (Map.Entry<String, String> entry : titles.entrySet()) {
             values.add(Arrays.asList(entry.getKey(), entry.getValue()));
         }
         try {
+            // [추가] 칭호 영역 초기화
+            GoogleSheetService.clearValues("시트1!C2:D100");
             GoogleSheetService.updateValues("시트1!C2:D", values);
         } catch (Exception e) { e.printStackTrace(); }
     }
@@ -96,11 +95,14 @@ public class DataManaGer {
     }
 
     public static void saveDebts(HashMap<String, Integer> debts) {
+        if (debts == null) return;
         List<List<Object>> values = new ArrayList<>();
         for (Map.Entry<String, Integer> entry : debts.entrySet()) {
             values.add(Arrays.asList(entry.getKey(), entry.getValue()));
         }
         try {
+            // [추가] 빚 영역 초기화
+            GoogleSheetService.clearValues("시트1!E2:F100");
             GoogleSheetService.updateValues("시트1!E2:F", values);
         } catch (Exception e) { e.printStackTrace(); }
     }
