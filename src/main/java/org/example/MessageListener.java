@@ -170,32 +170,32 @@ public class MessageListener extends ListenerAdapter {
         if (!isAdmin) {
             if (currentNickname.contains("[") && currentNickname.contains("]")) {
 
-            String tagInNickname = currentNickname.substring(currentNickname.indexOf("[") + 1, currentNickname.indexOf("]"));
+                String tagInNickname = currentNickname.substring(currentNickname.indexOf("[") + 1, currentNickname.indexOf("]"));
 
-            if (realTitle == null || !realTitle.contains(tagInNickname)) {
-                String targetNickname;
-                String alertMessage;
+                if (realTitle == null || !realTitle.contains(tagInNickname)) {
+                    String targetNickname;
+                    String alertMessage;
 
-                if (realTitle != null && !realTitle.isEmpty()) {
-                    // 가방에 있는것중 첫번째 칭호로 복구
-                    String firstTitle = realTitle.split(",")[0].split("\\|")[0];
-                    targetNickname = "[" + firstTitle + "] " + pureName;
-                    alertMessage = " **[" + pureName + "]**님, 구매하지 않은 칭호를 도용하셨습니다! 보유 중인 진짜 칭호 **[" + firstTitle + "]**로 변경됩니다.";
-                } else {
-                    //칭호가 없을경우 원래별명으로 변경
-                    targetNickname = pureName;
-                    alertMessage = " **[" + pureName + "]**님, 구매하지 않은 칭호를 무단 도용하여 닉네임이 강제 리셋되었습니다! 칭호는 상점에서 구매해 주세요.";
+                    if (realTitle != null && !realTitle.isEmpty()) {
+                        // 가방에 있는것중 첫번째 칭호로 복구
+                        String firstTitle = realTitle.split(",")[0].split("\\|")[0];
+                        targetNickname = "[" + firstTitle + "] " + pureName;
+                        alertMessage = " **[" + pureName + "]**님, 구매하지 않은 칭호를 도용하셨습니다! 보유 중인 진짜 칭호 **[" + firstTitle + "]**로 변경됩니다.";
+                    } else {
+                        //칭호가 없을경우 원래별명으로 변경
+                        targetNickname = pureName;
+                        alertMessage = " **[" + pureName + "]**님, 구매하지 않은 칭호를 무단 도용하여 닉네임이 강제 리셋되었습니다! 칭호는 상점에서 구매해 주세요.";
+                    }
+
+                    if (!event.getMember().isOwner()) {
+                        event.getMember().modifyNickname(targetNickname).queue();
+                    }
+                    event.getChannel().sendMessage(alertMessage).queue();
+                    return;
+
                 }
-
-                if (!event.getMember().isOwner()) {
-                    event.getMember().modifyNickname(targetNickname).queue();
-                }
-                event.getChannel().sendMessage(alertMessage).queue();
-                return;
-
             }
         }
-}
 
 
         //명령어 종류
@@ -225,7 +225,7 @@ public class MessageListener extends ListenerAdapter {
             int bonus = 0;
             String msg = " **[" + chatName + "]** 님이 출석체크를 완료하여 15포인트가 지급되었습니다.";
 
-            if (!userPoints.containsKey(nickname)){
+            if (!userPoints.containsKey(nickname)) {
                 bonus = 100;
                 msg = " **[" + chatName + "]** 님, 첫 출첵! 보너스 100포인트 포함 **115포인트**가 지급되었습니다.";
             }
@@ -376,7 +376,7 @@ public class MessageListener extends ListenerAdapter {
         }
         //내칭호 확인
         if (message.equals("!내칭호")) {
-            String currentData =userTitles.getOrDefault(nickname, "");
+            String currentData = userTitles.getOrDefault(nickname, "");
 
             if (currentData.isEmpty()) {
                 event.getChannel().sendMessage(" **[" + nickname + "]**님, 아직 보유한 칭호가 없습니다! 상점에서 구매해 보세요.").queue();
@@ -478,6 +478,54 @@ public class MessageListener extends ListenerAdapter {
 
             event.getChannel().sendMessage(sb.toString()).queue();
             return;
+        }
+        if (message.startsWith("!선물 ")) {
+            // 1. 명령어 형식 체크 (공백 기준으로 자르기)
+            String content = message.substring(4).trim(); // "!선물 " 제외
+            int lastSpaceIndex = content.lastIndexOf(" ");
+
+            if (lastSpaceIndex == -1) {
+                event.getChannel().sendMessage("사용법: `!선물 [받을사람] [금액]`").queue();
+                return;
+            }
+
+            String senderName = event.getMember().getEffectiveName(); // 보내는 사람
+            String receiverName = content.substring(0, lastSpaceIndex); // 받을 사람 (띄어쓰기 포함)
+            String amountStr = content.substring(lastSpaceIndex + 1); // 금액
+
+            try {
+                int amount = Integer.parseInt(amountStr);
+                int senderPoints = userPoints.getOrDefault(senderName, 0);
+
+                // 2. 예외 처리
+                if (amount <= 0) {
+                    event.getChannel().sendMessage("금액은 1 이상이어야 합니다.").queue();
+                    return;
+                }
+                if (senderName.equals(receiverName)) {
+                    event.getChannel().sendMessage("자기 자신에게는 선물할 수 없습니다!").queue();
+                    return;
+                }
+                if (senderPoints < amount) {
+                    event.getChannel().sendMessage("포인트가 부족합니다! (현재 보유: " + senderPoints + " P)").queue();
+                    return;
+                }
+                if (!userPoints.containsKey(receiverName)) {
+                    event.getChannel().sendMessage("서버에 존재하지 않는 유저입니다.").queue();
+                    return;
+                }
+
+                // 3. 포인트 이동 및 저장
+                userPoints.put(senderName, senderPoints - amount);
+                userPoints.put(receiverName, userPoints.getOrDefault(receiverName, 0) + amount);
+
+                DataManaGer.savePoints(userPoints); // 파일 저장
+
+                event.getChannel().sendMessage("🎁 **" + senderName + "**님이 **" + receiverName + "**님에게 **" + amount + " P**를 선물했습니다!").queue();
+
+            } catch (NumberFormatException e) {
+                event.getChannel().sendMessage("금액은 **숫자**로만 입력해주세요.").queue();
+            }
         }
 
     }
