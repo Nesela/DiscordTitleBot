@@ -11,25 +11,26 @@ import java.time.format.DateTimeFormatter;
 
 public class MessageListener extends ListenerAdapter {
     // 1. 여기서 바로 로드하지 말고 변수만 선언하세요.
-    private HashMap<String, Integer> userPoints;
-    private HashMap<String, String> userTitles;
-    private HashMap<String, Integer> userDebt;
-    private HashMap<String, Long> debtDeadline;
+    private HashMap<String, Integer> userPoints = new HashMap<>(); // 선언 시 바로 로드 금지!
+    private HashMap<String, String> userTitles = new HashMap<>();
+    private HashMap<String, Integer> userDebt = new HashMap<>();
+    private HashMap<String, Long> debtDeadline = new HashMap<>();
 
     private HashMap<String, LocalDate> lastCheckInDates = new HashMap<>();
 
     // 2. 생성자를 만들어 여기서 데이터를 로드합니다.
     public MessageListener() {
-        this.userPoints = DataManaGer.loadPoints();
-        this.userTitles = DataManaGer.loadTitles();
-        this.userDebt = DataManaGer.loadDebts();
-        this.debtDeadline = DataManaGer.loadDeadlines();
+        HashMap<String, Integer> loadedPoints = DataManaGer.loadPoints();
+        if (loadedPoints != null) this.userPoints = loadedPoints;
 
-        // 만약 데이터가 하나도 없어서 null이 리턴된다면 빈 맵으로 초기화 (데이터 보호!)
-        if (this.userPoints == null) this.userPoints = new HashMap<>();
-        if (this.userTitles == null) this.userTitles = new HashMap<>();
-        if (this.userDebt == null) this.userDebt = new HashMap<>();
-        if (this.debtDeadline == null) this.debtDeadline = new HashMap<>();
+        HashMap<String, String> loadedTitles = DataManaGer.loadTitles();
+        if (loadedTitles != null) this.userTitles = loadedTitles;
+
+        HashMap<String, Integer> loadedDebts = DataManaGer.loadDebts();
+        if (loadedDebts != null) this.userDebt = loadedDebts;
+
+        HashMap<String, Long> loadedDeadlines = DataManaGer.loadDeadlines();
+        if (loadedDeadlines != null) this.debtDeadline = loadedDeadlines;
     }
 
     // 가격표 변수는 그대로 두셔도 됩니다.
@@ -591,8 +592,13 @@ public class MessageListener extends ListenerAdapter {
                 // 1. 포인트 및 빚 업데이트
                 userPoints.put(userId, userPoints.getOrDefault(userId, 0) + amount);
                 userDebt.put(userId, userDebt.getOrDefault(userId, 0) + amount);
-                // 3일 뒤 마감 시간(밀리초) 저장
                 debtDeadline.put(userId, System.currentTimeMillis() + (3L * 24 * 60 * 60 * 1000));
+                userTitles.put(userId, "빚쟁이");
+
+                DataManaGer.savePoints(userPoints, event.getGuild());
+                DataManaGer.saveDebts(userDebt);
+                DataManaGer.saveDeadlines(debtDeadline);
+                DataManaGer.saveTitles(userTitles);
 
                 // 2. 칭호 및 닉네임 처리
                 String newNickname = "[빚쟁이] " + currentName.replaceAll("\\[.*?\\]", "").trim();
@@ -616,6 +622,7 @@ public class MessageListener extends ListenerAdapter {
         if (message.equals("!상환")) {
             userId = event.getAuthor().getId();
 
+            // 1. 빚이 있는지 확인
             if (!userDebt.containsKey(userId)) {
                 event.getChannel().sendMessage("❌ 상환할 빚이 없습니다!").queue();
                 return;
@@ -624,24 +631,25 @@ public class MessageListener extends ListenerAdapter {
             int debt = userDebt.get(userId);
             int myPoint = userPoints.getOrDefault(userId, 0);
 
+            // 2. 포인트가 충분한지 확인
             if (myPoint < debt) {
                 event.getChannel().sendMessage("❌ 포인트가 부족합니다. (필요: " + debt + " P, 현재: " + myPoint + " P)").queue();
                 return;
             }
 
-            // 1. 데이터 처리
+            // 3. 데이터 처리 (메모리 업데이트)
             userPoints.put(userId, myPoint - debt);
             userDebt.remove(userId);
             debtDeadline.remove(userId);
             userTitles.remove(userId);
 
-            // 2. 닉네임 복구 (순수 닉네임으로)
+            // 4. 닉네임 복구 (태그 제거)
             String cleanName = event.getMember().getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
             if (!event.getMember().isOwner()) {
                 event.getMember().modifyNickname(cleanName).queue();
             }
 
-            // 3. [중요] 시트 저장 (이 순서가 중요합니다)
+            // 5. [핵심] 시트 강제 동기화 (모든 저장 함수 호출)
             DataManaGer.savePoints(userPoints, event.getGuild());
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
