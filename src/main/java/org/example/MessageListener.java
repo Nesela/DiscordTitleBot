@@ -300,7 +300,7 @@ public class MessageListener extends ListenerAdapter {
             int actualBalance = myPoint - myDebt;
 
             String status = (myDebt > 0) ? " (빚: " + myDebt + " P)" : "";
-            event.getChannel().sendMessage("💰 **[" + chatName + "]** 님의 현재 잔고: **" + actualBalance + " P**" + status).queue();
+            event.getChannel().sendMessage("💰 **[" + chatName + "]** 님의 현재 잔고: **" + myPoint + " P**" + status).queue();
         }
 
 // 칭호상점 (그대로 두셔도 됩니다)
@@ -488,12 +488,10 @@ public class MessageListener extends ListenerAdapter {
             }
 
             // [중요] ID 기반으로 포인트와 빚 계산
-            int myPoint = userPoints.getOrDefault(userId, 0);
-            int myDebt = userDebt.getOrDefault(userId, 0);
-            int actualBalance = myPoint - myDebt;
+            int myPoint = userPoints.getOrDefault(userId, 0); // 이것만 있으면 됩니다!
 
-            if (bet > actualBalance) {
-                event.getChannel().sendMessage(" **[" + pureName + "]**님, 포인트가 부족합니다! (현재 실제 잔고: " + actualBalance + " P)").queue();
+            if (bet > myPoint) {
+                event.getChannel().sendMessage(" ❌ **[" + pureName + "]님, 포인트가 부족합니다! (보유: " + myPoint + " P)**").queue();
                 return;
             }
 
@@ -605,7 +603,7 @@ public class MessageListener extends ListenerAdapter {
                 userId = event.getAuthor().getId();
 
                 if (amount > 100) {
-                    event.getChannel().sendMessage("❌ 대출 한도를 초과했습니다! (최대 1,00 P까지 대출 가능)").queue();
+                    event.getChannel().sendMessage("❌ 대출 한도를 초과했습니다! (최대 100 P까지 대출 가능)").queue();
                     return; // 여기서 멈춤 (데이터 저장 안 함)
                 }
 
@@ -660,31 +658,27 @@ public class MessageListener extends ListenerAdapter {
             int myPoint = userPoints.getOrDefault(userId, 0);
 
             // 2. 포인트가 충분한지 확인
-            if (myPoint < debt) {
-                event.getChannel().sendMessage("❌ 포인트가 부족합니다. (필요: " + debt + " P, 현재: " + myPoint + " P)").queue();
-                return;
-            }
-
-            // 3. 데이터 처리 (메모리 업데이트)
             userPoints.put(userId, myPoint - debt);
             userDebt.remove(userId);
             debtDeadline.remove(userId);
             userTitles.remove(userId);
 
-            // 4. 닉네임 복구 (태그 제거)
             String cleanName = event.getMember().getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
             if (!event.getMember().isOwner()) {
                 event.getMember().modifyNickname(cleanName).queue();
             }
 
-            // 5. [핵심] 시트 강제 동기화 (모든 저장 함수 호출)
+            // 5. [핵심] 시트 동기화
             DataManaGer.savePoints(userPoints, event.getGuild());
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
             DataManaGer.saveTitles(userTitles);
 
-            event.getChannel().sendMessage("✅ 빚 " + debt + " P를 상환하여 [빚쟁이] 칭호를 제거했습니다!").queue();
+            // 6. 결과 메시지 (마이너스 여부를 확인해서 보여줌)
+            int finalPoint = userPoints.get(userId);
+            event.getChannel().sendMessage("✅ 빚 " + debt + " P를 상환했습니다. 현재 잔고: **" + finalPoint + " P**").queue();
         }
+
         if (message.startsWith("!시트비우기 ")) {
             boolean isStaff = event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR);
             if (!isStaff) {
