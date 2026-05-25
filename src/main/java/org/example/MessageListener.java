@@ -10,15 +10,27 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
 public class MessageListener extends ListenerAdapter {
-    // 포인트 및 데이터 저장소 (키값은 무조건 유저의 고유 ID(String)를 사용해야 합니다!)
-    private HashMap<String, Integer> userPoints = DataManaGer.loadPoints();
-    private HashMap<String, String> userTitles = DataManaGer.loadTitles();
-    private HashMap<String, Integer> userDebt = DataManaGer.loadDebts();
-    private HashMap<String, Long> debtDeadline = DataManaGer.loadDeadlines();
+    // 1. 여기서 바로 로드하지 말고 변수만 선언하세요.
+    private HashMap<String, Integer> userPoints;
+    private HashMap<String, String> userTitles;
+    private HashMap<String, Integer> userDebt;
+    private HashMap<String, Long> debtDeadline;
 
-
-    // 출석체크 기록도 저장되도록 나중에 DataManaGer에 추가하세요.
     private HashMap<String, LocalDate> lastCheckInDates = new HashMap<>();
+
+    // 2. 생성자를 만들어 여기서 데이터를 로드합니다.
+    public MessageListener() {
+        this.userPoints = DataManaGer.loadPoints();
+        this.userTitles = DataManaGer.loadTitles();
+        this.userDebt = DataManaGer.loadDebts();
+        this.debtDeadline = DataManaGer.loadDeadlines();
+
+        // 만약 데이터가 하나도 없어서 null이 리턴된다면 빈 맵으로 초기화 (데이터 보호!)
+        if (this.userPoints == null) this.userPoints = new HashMap<>();
+        if (this.userTitles == null) this.userTitles = new HashMap<>();
+        if (this.userDebt == null) this.userDebt = new HashMap<>();
+        if (this.debtDeadline == null) this.debtDeadline = new HashMap<>();
+    }
 
     // 가격표 변수는 그대로 두셔도 됩니다.
     private int publicTitlePrice = 100;
@@ -603,67 +615,38 @@ public class MessageListener extends ListenerAdapter {
 
         if (message.equals("!상환")) {
             userId = event.getAuthor().getId();
-            int debt = userDebt.getOrDefault(userId, 0);
 
-            if (debt <= 0) {
+            if (!userDebt.containsKey(userId)) {
                 event.getChannel().sendMessage("❌ 상환할 빚이 없습니다!").queue();
                 return;
             }
 
+            int debt = userDebt.get(userId);
             int myPoint = userPoints.getOrDefault(userId, 0);
+
             if (myPoint < debt) {
-                event.getChannel().sendMessage("❌ 빚을 갚을 포인트가 부족합니다. (현재 잔고: " + myPoint + " P, 갚아야 할 빚: " + debt + " P)").queue();
+                event.getChannel().sendMessage("❌ 포인트가 부족합니다. (필요: " + debt + " P, 현재: " + myPoint + " P)").queue();
                 return;
             }
 
-            // 1. 포인트 차감 및 데이터 삭제
+            // 1. 데이터 처리
             userPoints.put(userId, myPoint - debt);
             userDebt.remove(userId);
             debtDeadline.remove(userId);
             userTitles.remove(userId);
 
-            // 2. 닉네임 원상복구 (이미 상단에서 선언된 pureName 사용)
+            // 2. 닉네임 복구 (순수 닉네임으로)
+            String cleanName = event.getMember().getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
             if (!event.getMember().isOwner()) {
-                event.getMember().modifyNickname(pureName).queue();
+                event.getMember().modifyNickname(cleanName).queue();
             }
 
-            // 3. 데이터 저장
+            // 3. [중요] 시트 저장 (이 순서가 중요합니다)
             DataManaGer.savePoints(userPoints, event.getGuild());
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
             DataManaGer.saveTitles(userTitles);
 
-            event.getChannel().sendMessage("✅ **[" + pureName + "]**님의 빚 **" + debt + " P**를 모두 상환했습니다! 다시 자유로운 몸이 되셨군요!").queue();
-        }
-        if (message.startsWith("!시트비우기 ")) {
-            // [수정] 방장(Owner) OR 관리자(Administrator) 권한 체크
-            boolean isStaff = event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR);
-
-            if (!isStaff) {
-                event.getChannel().sendMessage("❌ 서버 운영진(방장/관리자)만 사용할 수 있습니다.").queue();
-                return;
-            }
-
-            // 2. 명령어 확인용 (오타 방지)
-            String target = message.substring(7).trim();
-            if (!target.equals("확인")) {
-                event.getChannel().sendMessage("⚠️ 정말 모든 데이터를 삭제하시겠습니까?\n맞다면 `!시트비우기 확인`을 입력하세요.").queue();
-                return;
-            }
-
-            // 3. 모든 데이터 초기화
-            userPoints.clear();
-            userTitles.clear();
-            userDebt.clear();
-            debtDeadline.clear();
-
-            // 4. 시트 비우기
-            try {
-                GoogleSheetService.clearValues("시트1!A2:H100");
-                event.getChannel().sendMessage("✅ 운영진 명령으로 모든 데이터가 초기화되었습니다!").queue();
-            } catch (Exception e) {
-                event.getChannel().sendMessage("⚠️ 시트 초기화 중 오류가 발생했으나 메모리는 비웠습니다: " + e.getMessage()).queue();
-            }
-        }
-    }
+            event.getChannel().sendMessage("✅ 빚 " + debt + " P를 상환하여 [빚쟁이] 칭호를 제거했습니다!").queue();
+        }}
 }
