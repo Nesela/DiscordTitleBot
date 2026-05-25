@@ -199,15 +199,15 @@ public class MessageListener extends ListenerAdapter {
 
             // 1. 신규/기존 확인 후 포인트 계산
             int bonus = 0;
-            String msg = " **[" + chatName + "]** 님이 출석체크를 완료하여 10포인트가 지급되었습니다.";
+            String msg = " **[" + chatName + "]** 님이 출석체크를 완료하여 15포인트가 지급되었습니다.";
 
             if (!userPoints.containsKey(nickname)){
                 bonus = 100;
-                msg = " **[" + chatName + "]** 님, 첫 출첵! 보너스 100포인트 포함 **110포인트**가 지급되었습니다.";
+                msg = " **[" + chatName + "]** 님, 첫 출첵! 보너스 100포인트 포함 **115포인트**가 지급되었습니다.";
             }
 
             int currentPoint = userPoints.getOrDefault(nickname, 0);
-            int newPoint = currentPoint + 10 + bonus; // 10(기본) + 보너스(신규일 때 100)
+            int newPoint = currentPoint + 15 + bonus; // 15(기본) + 보너스(신규일 때 105)
 
             userPoints.put(nickname, newPoint);
             lastCheckInDates.put(nickname, today);
