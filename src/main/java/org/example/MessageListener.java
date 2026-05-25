@@ -204,8 +204,8 @@ public class MessageListener extends ListenerAdapter {
                     "💰 **포인트 & 도박**\n" +
                     "1. `!출첵` : 출석체크를 진행하여 포인트를 획득합니다.\n" +
                     "1. `!포인트` : 내 보유 포인트를 확인합니다.\n" +
-                    "1. `!랭킹` : 현재 보유 포인트 랭킹을 확인합니다.\n\n" +
-                    "1. `!선물` : 포인트의 선물이 가능합니다.\n\n" +
+                    "1. `!랭킹` : 현재 보유 포인트 랭킹을 확인합니다.\n" +
+                    "1. `!선물` : 포인트의 선물이 가능합니다.\n" +
                     "1. `!홀짝 [홀/짝] [금액]` : 포인트의 2배를 노리는 도박 게임!\n\n" +
                     "🏷️ **칭호 시스템**\n" +
                     "\n 구매하신 칭호는 구매일로부터 14일 동안 사용하실 수 있습니다\n" +
@@ -481,6 +481,7 @@ public class MessageListener extends ListenerAdapter {
             event.getChannel().sendMessage(sb.toString()).queue();
             return;
         }
+        //선물하기
         if (message.startsWith("!선물 ")) {
             // 1. 명령어 형식 체크 (공백 기준으로 자르기)
             String content = message.substring(4).trim(); // "!선물 " 제외
@@ -491,8 +492,8 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
-            String senderName = event.getMember().getEffectiveName(); // 보내는 사람
-            String receiverName = content.substring(0, lastSpaceIndex); // 받을 사람 (띄어쓰기 포함)
+            String senderName = pureName; // 보내는 사람
+            String receiverName = content.substring(0, lastSpaceIndex).trim(); // 받을 사람 (띄어쓰기 포함)
             String amountStr = content.substring(lastSpaceIndex + 1); // 금액
 
             try {
@@ -512,7 +513,16 @@ public class MessageListener extends ListenerAdapter {
                     event.getChannel().sendMessage("포인트가 부족합니다! (현재 보유: " + senderPoints + " P)").queue();
                     return;
                 }
-                if (!userPoints.containsKey(receiverName)) {
+                boolean userFound = false;
+                for (String key : userPoints.keySet()) {
+                    if (key.replaceAll("\\s+", "").equals(receiverName.replaceAll("\\s+", ""))) {
+                        receiverName = key; // 진짜 키값으로 닉네임을 보정함
+                        userFound = true;
+                        break;
+                    }
+                }
+
+                if (!userFound) {
                     event.getChannel().sendMessage("서버에 존재하지 않는 유저입니다.").queue();
                     return;
                 }
