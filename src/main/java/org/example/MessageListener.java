@@ -17,7 +17,6 @@ public class MessageListener extends ListenerAdapter {
     private HashMap<String, Long> debtDeadline = DataManaGer.loadDeadlines();
 
 
-
     // 출석체크 기록도 저장되도록 나중에 DataManaGer에 추가하세요.
     private HashMap<String, LocalDate> lastCheckInDates = new HashMap<>();
 
@@ -596,30 +595,34 @@ public class MessageListener extends ListenerAdapter {
             }
         }
         if (message.startsWith("!시트비우기 ")) {
-            if (!event.getMember().isOwner()) {
-                event.getChannel().sendMessage("❌ 서버 방장만 사용할 수 있습니다.").queue();
+            // [수정] 방장(Owner) OR 관리자(Administrator) 권한 체크
+            boolean isStaff = event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR);
+
+            if (!isStaff) {
+                event.getChannel().sendMessage("❌ 서버 운영진(방장/관리자)만 사용할 수 있습니다.").queue();
                 return;
             }
 
+            // 2. 명령어 확인용 (오타 방지)
             String target = message.substring(7).trim();
             if (!target.equals("확인")) {
-                event.getChannel().sendMessage("⚠️ 모든 데이터 삭제 확인: `!시트비우기 확인`을 입력하세요.").queue();
+                event.getChannel().sendMessage("⚠️ 정말 모든 데이터를 삭제하시겠습니까?\n맞다면 `!시트비우기 확인`을 입력하세요.").queue();
                 return;
             }
 
-            // 1. 메모리 초기화
+            // 3. 모든 데이터 초기화
             userPoints.clear();
             userTitles.clear();
             userDebt.clear();
             debtDeadline.clear();
 
-            // 2. 시트 비우기 (try-catch로 감싸서 오류 방지)
+            // 4. 시트 비우기
             try {
                 GoogleSheetService.clearValues("시트1!A2:H100");
-                event.getChannel().sendMessage("✅ 모든 데이터가 초기화되었습니다!").queue();
+                event.getChannel().sendMessage("✅ 운영진 명령으로 모든 데이터가 초기화되었습니다!").queue();
             } catch (Exception e) {
-                // 에러가 나도 메모리는 이미 비웠으므로 봇은 계속 돌아갑니다.
                 event.getChannel().sendMessage("⚠️ 시트 초기화 중 오류가 발생했으나 메모리는 비웠습니다: " + e.getMessage()).queue();
             }
         }
-}}
+    }
+}
