@@ -210,19 +210,25 @@ public class MessageListener extends ListenerAdapter {
         }
 
 // 칭호 검사 (도용 방지)
+        // 칭호 검사 (도용 방지) 부분 수정
         if (!isAdmin) {
             if (currentNickname.contains("[") && currentNickname.contains("]")) {
                 String tagInNickname = currentNickname.substring(currentNickname.indexOf("[") + 1, currentNickname.indexOf("]"));
-                if (tagInNickname.equals("빚쟁이")) return;
 
-                if (realTitle == null || !realTitle.contains(tagInNickname)) {
-                    String targetNickname = (realTitle != null && !realTitle.isEmpty())
-                            ? "[" + realTitle.split(",")[0].split("\\|")[0] + "] " + pureName
-                            : pureName;
+                // [수정 포인트] 빚쟁이는 예외 처리!
+                if (tagInNickname.equals("빚쟁이")) {
+                    // 빚쟁이일 때는 칭호 도용 체크를 아예 하지 않고 다음 로직으로 넘어감
+                } else {
+                    // 그 외 일반 칭호들만 도용 체크 수행
+                    if (realTitle == null || !realTitle.contains(tagInNickname)) {
+                        String targetNickname = (realTitle != null && !realTitle.isEmpty())
+                                ? "[" + realTitle.split(",")[0].split("\\|")[0] + "] " + pureName
+                                : pureName;
 
-                    if (!event.getMember().isOwner()) event.getMember().modifyNickname(targetNickname).queue();
-                    event.getChannel().sendMessage("⚠️ 칭호 도용 감지! 닉네임이 리셋되었습니다.").queue();
-                    return;
+                        if (!event.getMember().isOwner()) event.getMember().modifyNickname(targetNickname).queue();
+                        event.getChannel().sendMessage("⚠️ 칭호 도용 감지! 닉네임이 리셋되었습니다.").queue();
+                        return; // 여기서 멈추는 것은 정상
+                    }
                 }
             }
         }
@@ -593,6 +599,41 @@ public class MessageListener extends ListenerAdapter {
             } catch (Exception e) {
                 event.getChannel().sendMessage("❌ 대출 오류: " + e.getMessage()).queue();
             }
+        }
+
+        if (message.equals("!상환")) {
+            userId = event.getAuthor().getId();
+            int debt = userDebt.getOrDefault(userId, 0);
+
+            if (debt <= 0) {
+                event.getChannel().sendMessage("❌ 상환할 빚이 없습니다!").queue();
+                return;
+            }
+
+            int myPoint = userPoints.getOrDefault(userId, 0);
+            if (myPoint < debt) {
+                event.getChannel().sendMessage("❌ 빚을 갚을 포인트가 부족합니다. (현재 잔고: " + myPoint + " P, 갚아야 할 빚: " + debt + " P)").queue();
+                return;
+            }
+
+            // 1. 포인트 차감 및 데이터 삭제
+            userPoints.put(userId, myPoint - debt);
+            userDebt.remove(userId);
+            debtDeadline.remove(userId);
+            userTitles.remove(userId);
+
+            // 2. 닉네임 원상복구 (이미 상단에서 선언된 pureName 사용)
+            if (!event.getMember().isOwner()) {
+                event.getMember().modifyNickname(pureName).queue();
+            }
+
+            // 3. 데이터 저장
+            DataManaGer.savePoints(userPoints, event.getGuild());
+            DataManaGer.saveDebts(userDebt);
+            DataManaGer.saveDeadlines(debtDeadline);
+            DataManaGer.saveTitles(userTitles);
+
+            event.getChannel().sendMessage("✅ **[" + pureName + "]**님의 빚 **" + debt + " P**를 모두 상환했습니다! 다시 자유로운 몸이 되셨군요!").queue();
         }
         if (message.startsWith("!시트비우기 ")) {
             // [수정] 방장(Owner) OR 관리자(Administrator) 권한 체크
