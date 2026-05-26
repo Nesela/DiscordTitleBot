@@ -721,21 +721,31 @@ public class MessageListener extends ListenerAdapter {
 
             event.getChannel().sendMessage("⏳ 데이터를 시트에 강제 동기화 중입니다...").queue();
 
-            try {
-                // 1. 기존 시트 데이터 싹 날리기 (데이터 오염 방지)
-                GoogleSheetService.clearValues("시트1!A2:E");
+            // 1. 멤버를 먼저 불러옵니다
+            event.getGuild().loadMembers().onSuccess(members -> {
 
-                // 2. 현재 메모리에 있는 데이터로 강제 저장
-                DataManaGer.savePoints(userPoints, event.getGuild());
-                DataManaGer.saveTitles(userTitles);
-                DataManaGer.saveDebts(userDebt);
+                // 2. [핵심] 불러온 멤버들을 캐시에 먼저 넣어둡니다
+                for (net.dv8tion.jda.api.entities.Member m : members) {
+                    DataManaGer.nicknameCache.put(m.getId(), m.getEffectiveName());
+                }
 
-                event.getChannel().sendMessage("✅ 시트 데이터가 현재 봇 상태로 강제 교체되었습니다!").queue();
-                System.out.println("[시스템] 데이터 복구 완료. 총 유저 수: " + userPoints.size());
-            } catch (Exception e) {
-                event.getChannel().sendMessage("❌ 오류 발생: " + e.getMessage()).queue();
-                e.printStackTrace(); // 콘솔에 상세 오류 출력
-            }
+                try {
+                    // 3. 이제 안전하게 데이터를 싹 날리고 다시 저장합니다
+                    GoogleSheetService.clearValues("시트1!A2:E");
+
+                    DataManaGer.savePoints(userPoints, event.getGuild());
+                    DataManaGer.saveTitles(userTitles);
+                    DataManaGer.saveDebts(userDebt);
+
+                    event.getChannel().sendMessage("✅ 시트 데이터가 현재 봇 상태로 강제 교체되었습니다!").queue();
+                    System.out.println("[시스템] 데이터 복구 완료. 총 유저 수: " + userPoints.size());
+                } catch (Exception e) {
+                    event.getChannel().sendMessage("❌ 오류 발생: " + e.getMessage()).queue();
+                    e.printStackTrace();
+                }
+            }).onError(e -> {
+                event.getChannel().sendMessage("❌ 멤버 로드 실패: " + e.getMessage()).queue();
+            });
         }
         // 시트 비우기 명령어 (운영진만 사용 가능)
         if (message.startsWith("!시트비우기 ")) {
