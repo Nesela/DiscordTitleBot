@@ -127,6 +127,10 @@ public class MessageListener extends ListenerAdapter {
     public void onMessageReceived(MessageReceivedEvent event) {
         if (event.getAuthor().isBot()) return;
 
+        if (event.getMember() != null) {
+            DataManaGer.nicknameCache.put(event.getAuthor().getId(), event.getMember().getEffectiveName());
+        }
+
         // 공통 변수 (딱 한 번만 선언하세요!)
         String message = event.getMessage().getContentRaw();
         String userId = event.getAuthor().getId();
@@ -555,7 +559,12 @@ public class MessageListener extends ListenerAdapter {
 
                 // ID로 멤버를 찾아 닉네임을 표시 (없으면 ID 그대로 표시)
                 net.dv8tion.jda.api.entities.Member member = event.getGuild().getMemberById(targetId);
-                String name = (member != null) ? member.getEffectiveName() : "알 수 없음";
+                String name = "알 수 없음";
+                if (member != null) {
+                    name = member.getEffectiveName();
+                } else if (DataManaGer.nicknameCache.containsKey(targetId)) {
+                    name = DataManaGer.nicknameCache.get(targetId);
+                }
 
                 sb.append(String.format("%d등: **%s** %d P\n", i + 1, name, actualBalance));
             }
@@ -597,6 +606,15 @@ public class MessageListener extends ListenerAdapter {
                     if (m.getEffectiveName().contains(receiverName)) {
                         receiverId = m.getId();
                         break;
+                    }
+                }
+
+                if (receiverId == null) {
+                    for (String id : DataManaGer.nicknameCache.keySet()) {
+                        if (DataManaGer.nicknameCache.get(id).contains(receiverName)) {
+                            receiverId = id;
+                            break;
+                        }
                     }
                 }
 
