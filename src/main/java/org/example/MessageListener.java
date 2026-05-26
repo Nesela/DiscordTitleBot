@@ -662,7 +662,6 @@ public class MessageListener extends ListenerAdapter {
         }
 
         //상한
-        //상한
         if (message.equals("!상환")) {
             userId = event.getAuthor().getId();
 
@@ -679,49 +678,73 @@ public class MessageListener extends ListenerAdapter {
             int newPoint = myPoint - debt;
             userPoints.put(userId, newPoint);
 
-            // 3. 칭호 복구를 위해 삭제 전에 기존 칭호 미리 백업
-            String originalTitle = userTitles.get(userId);
-
-            // 4. 빚 관련 데이터 삭제
+            // 3. 빚 관련 데이터 삭제
             userDebt.remove(userId);
             debtDeadline.remove(userId);
 
-            // 5. 닉네임 처리
-            String cleanName = event.getMember().getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
+            // 4. 신분(칭호) 처리: 빚쟁이와 노예를 모두 삭제
+            String currentTitle = userTitles.getOrDefault(userId, "");
+            if (currentTitle.equals("빚쟁이") || currentTitle.equals("노예")) {
+                userTitles.remove(userId);
+            }
 
-            // 6. 신분 및 닉네임 변경 (핵심 수정 구간)
+            // 5. 닉네임 원상복구
+            String cleanName = event.getMember().getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
             if (!event.getMember().isOwner()) {
                 if (newPoint < 0) {
-                    // [노예] 상태: 시트에 기록되도록 userTitles에 저장!
                     userTitles.put(userId, "노예");
                     event.getMember().modifyNickname("[노예] " + cleanName).queue();
                 } else {
-                    // 잔고가 0 이상: [노예] 상태에서 벗어남
-                    // 1. 만약 [노예]였던 상태라면 시트에서도 삭제
-                    if ("노예".equals(userTitles.get(userId))) {
-                        userTitles.remove(userId);
-                    }
-
-                    // 2. 원래 칭호 복구 (이전 코드 활용)
-                    if (originalTitle != null && !originalTitle.isEmpty()) {
-                        event.getMember().modifyNickname("[" + originalTitle + "] " + cleanName).queue();
-                    } else {
-                        event.getMember().modifyNickname(cleanName).queue();
-                    }
+                    event.getMember().modifyNickname(cleanName).queue();
                 }
             }
 
-            // 7. 시트 저장 (이제 [노예]가 userTitles에 있으므로 시트에 확실히 등록됩니다!)
+            // 6. 시트 저장
             DataManaGer.savePoints(userPoints, event.getGuild());
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
             DataManaGer.saveTitles(userTitles);
 
-            // 8. 결과 메시지 출력
+            // 7. 결과 메시지
             if (newPoint < 0) {
                 event.getChannel().sendMessage("⛓️ 빚 " + debt + " P를 상환했지만, 잔고가 마이너스이므로 **[노예]** 신분이 됩니다. 현재 잔고: **" + newPoint + " P**").queue();
             } else {
-                event.getChannel().sendMessage("✅ 빚 " + debt + " P를 성공적으로 상환했습니다! 현재 잔고: **" + newPoint + " P**").queue();
+                event.getChannel().sendMessage("✅ 빚 " + debt + " P를 성공적으로 상환했습니다! **[빚쟁이]** 칭호가 해제되었습니다.").queue();
+            }
+        }
+        //데이터복구
+        if (message.equals("!데이터복구")) {
+            if (!event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+                event.getChannel().sendMessage("❌ 운영진만 사용 가능합니다.").queue();
+                return;
+            }
+
+            // 1. 서버 멤버 전원에게서 최신 닉네임을 긁어와 캐시에 강제 저장
+            for (net.dv8tion.jda.api.entities.Member member : event.getGuild().getMembers()) {
+                DataManaGer.nicknameCache.put(member.getId(), member.getEffectiveName());
+            }
+
+            // 2. 강제로 시트 저장 실행 (이때 nicknameCache에 방금 긁어온 진짜 이름들이 들어감!)
+            DataManaGer.savePoints(userPoints, event.getGuild());
+
+            event.getChannel().sendMessage("✅ 완료! 서버의 모든 유저 데이터를 다시 불러와 시트의 '알수없음'을 정리했습니다.").queue();
+        }
+        // 시트 비우기 명령어 (운영진만 사용 가능)
+        if (message.startsWith("!시트비우기 ")) {
+            // 운영진 권한 체크
+            if (!event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+                event.getChannel().sendMessage("❌ 운영진만 사용할 수 있는 기능입니다.").queue();
+                return;
+            }
+
+            // 명령어 뒤에 적은 영역을 읽어서 비움 (예: !시트비우기 시트1!A2:C)
+            String range = message.substring(7).trim();
+
+            try {
+                GoogleSheetService.clearValues(range);
+                event.getChannel().sendMessage("✅ **[" + range + "]** 영역의 데이터가 삭제되었습니다.").queue();
+            } catch (Exception e) {
+                event.getChannel().sendMessage("❌ 삭제 중 오류 발생: " + e.getMessage()).queue();
             }
         }
 
