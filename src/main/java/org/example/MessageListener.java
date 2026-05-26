@@ -43,9 +43,22 @@ public class MessageListener extends ListenerAdapter {
     }
 
     //만료 여부 확인
-    private boolean isExpiresd(String dateString) {
-        LocalDate expiry = LocalDate.parse(dateString, DateTimeFormatter.BASIC_ISO_DATE);
-        return LocalDate.now().isAfter(expiry);
+    public boolean isExpiresd(String dateString) {
+        if (dateString == null || dateString.isEmpty()) return false;
+
+        try {
+            // [핵심] 숫자와 연관 없는 문자(], [, 등)를 전부 제거하고 숫자만 남깁니다.
+            String cleanDate = dateString.replaceAll("[^0-9]", "");
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+            LocalDate expiryDate = LocalDate.parse(cleanDate, formatter);
+            LocalDate now = LocalDate.now();
+
+            return now.isAfter(expiryDate);
+        } catch (Exception e) {
+            System.out.println("날짜 파싱 오류 발생: " + dateString);
+            return false; // 파싱 실패 시 만료되지 않은 것으로 간주하거나 에러 처리
+        }
     }
 
     private void checkTitlse(MessageReceivedEvent event) {
@@ -402,36 +415,39 @@ public class MessageListener extends ListenerAdapter {
         }
 
 // 칭호교환
-        if (message.startsWith("!칭호교환 ")) {
+        if (message.startsWith("!칭호교체 ")) {
             userId = event.getAuthor().getId();
-            String newTitle = message.substring(6).trim();
-            String currentData = userTitles.getOrDefault(userId, ""); // ID로 조회
+            String newTitle = message.substring(6).trim(); // !칭호교체 + 공백 = 6글자라 그대로 쓰시면 됩니다
+            String currentData = userTitles.getOrDefault(userId, "");
 
             if (!currentData.contains(newTitle)) {
-                event.getChannel().sendMessage("보유하지 않은 칭호입니다!").queue();
+                event.getChannel().sendMessage("❌ 보유하지 않은 칭호입니다!").queue();
                 return;
             }
 
             String[] entries = currentData.split(",");
-            boolean isFound = false;
+            StringBuilder reordered = new StringBuilder();
+            String targetEntry = "";
+
             for (String entry : entries) {
-                String[] parts = entry.split("\\|");
-                if (parts[0].equals(newTitle)) {
-                    if (isExpiresd(parts[1])) {
-                        event.getChannel().sendMessage(" [" + newTitle + "] 칭호는 이미 기간이 만료되었습니다.").queue();
-                        return;
-                    }
-                    isFound = true;
-                    break;
+                if (entry.split("\\|")[0].equals(newTitle)) {
+                    targetEntry = entry;
+                } else {
+                    if (reordered.length() > 0) reordered.append(",");
+                    reordered.append(entry);
                 }
             }
 
-            if (!isFound) return;
+            String finalData = (reordered.length() == 0) ? targetEntry : targetEntry + "," + reordered.toString();
 
+            userTitles.put(userId, finalData);
+            DataManaGer.saveTitles(userTitles);
+
+            String cleanName = event.getMember().getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
             if (!event.getMember().isOwner()) {
-                event.getMember().modifyNickname("[" + newTitle + "] " + pureName).queue();
+                event.getMember().modifyNickname("[" + newTitle + "] " + cleanName).queue();
             }
-            event.getChannel().sendMessage(" 칭호를 **[" + newTitle + "]**(으)로 변경했습니다!").queue();
+            event.getChannel().sendMessage("✅ 칭호를 **[" + newTitle + "]**(으)로 교체했습니다!").queue();
         }
         //내칭호 확인
         // 내칭호 확인

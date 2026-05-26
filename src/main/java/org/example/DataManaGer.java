@@ -5,54 +5,45 @@ import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 
 public class DataManaGer {
-
-    public static HashMap<String, String> userNicknames = new HashMap<>();
+    // 1. 메모리에 닉네임을 기억할 Map 추가
+    public static HashMap<String, String> nicknameCache = new HashMap<>();
 
     public static HashMap<String, Integer> loadPoints() {
         HashMap<String, Integer> map = new HashMap<>();
-        // 닉네임 맵 초기화
-        userNicknames.clear();
+        nicknameCache.clear(); // 데이터를 새로 읽을 때 캐시 초기화
 
         try {
             List<List<Object>> values = GoogleSheetService.getValues("시트1!A2:C100");
             if (values != null) {
                 for (List<Object> row : values) {
-                    if (row.size() >= 3 && row.get(0) != null && row.get(2) != null) {
+                    if (row.size() >= 3 && row.get(0) != null) {
                         String userId = row.get(0).toString();
                         String nickname = (row.get(1) != null) ? row.get(1).toString() : "알수없음";
+                        int point = Integer.parseInt(row.get(2).toString());
 
-                        map.put(userId, Integer.parseInt(row.get(2).toString()));
-                        userNicknames.put(userId, nickname); // 닉네임 저장
+                        map.put(userId, point);
+                        nicknameCache.put(userId, nickname);
                     }
                 }
             }
         } catch (Exception e) {
-            System.out.println("데이터 로드 중 에러: " + e.getMessage());
+            e.printStackTrace();
         }
         return map;
     }
 
     public static void savePoints(HashMap<String, Integer> points, Guild guild) {
-        if (points == null || points.isEmpty()) return;
         List<List<Object>> values = new ArrayList<>();
-
         for (Map.Entry<String, Integer> entry : points.entrySet()) {
             String userId = entry.getKey();
-
-            // 유저 찾기 시도
+            int point = entry.getValue();
             Member member = guild.getMemberById(userId);
-
-            // [핵심] 봇이 유저를 찾으면 닉네임 갱신, 못 찾으면 기존 닉네임 유지
             if (member != null) {
-                userNicknames.put(userId, member.getEffectiveName());
+                nicknameCache.put(userId, member.getEffectiveName());
             }
-
-            // 맵에 닉네임이 없으면 "알수없음", 있으면 그것을 사용
-            String nameToSave = userNicknames.getOrDefault(userId, "알수없음");
-
-            values.add(Arrays.asList(userId, nameToSave, entry.getValue()));
+            String nameToSave = nicknameCache.getOrDefault(userId, "알수없음");
+            values.add(Arrays.asList(userId, nameToSave, point));
         }
-
         try {
             GoogleSheetService.updateValues("시트1!A2:C", values);
         } catch (Exception e) {
@@ -67,12 +58,10 @@ public class DataManaGer {
             List<List<Object>> values = GoogleSheetService.getValues("시트1!D2:E100");
             if (values != null) {
                 for (List<Object> row : values) {
-                    if (row.size() >= 2 && row.get(0) != null) {
-                        map.put(row.get(0).toString(), row.get(1) != null ? row.get(1).toString() : "");
-                    }
+                    if (row.size() >= 2) map.put(row.get(0).toString(), row.get(1).toString());
                 }
             }
-        } catch (Exception e) { System.out.println("칭호 로드 에러: " + e.getMessage()); }
+        } catch (Exception e) { e.printStackTrace(); }
         return map;
     }
 
