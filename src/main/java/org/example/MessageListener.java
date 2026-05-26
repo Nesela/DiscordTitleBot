@@ -767,6 +767,27 @@ public class MessageListener extends ListenerAdapter {
                 event.getChannel().sendMessage("❌ 멤버 로드 실패: " + e.getMessage()).queue();
             });
         }
+        if (message.equals("!데이터불러오기")) {
+            if (!event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+                event.getChannel().sendMessage("❌ 운영진만 사용 가능합니다.").queue();
+                return;
+            }
+
+            event.getChannel().sendMessage("⏳ 시트에서 데이터를 불러오는 중...").queue();
+
+            try {
+                // DataManaGer에서 다시 로드
+                this.userPoints = DataManaGer.loadPoints();
+                this.userTitles = DataManaGer.loadTitles();
+                this.userDebt = DataManaGer.loadDebts();
+                this.debtDeadline = DataManaGer.loadDeadlines();
+
+                event.getChannel().sendMessage("✅ 시트 데이터를 봇으로 성공적으로 불러왔습니다!").queue();
+            } catch (Exception e) {
+                event.getChannel().sendMessage("❌ 불러오기 실패: " + e.getMessage()).queue();
+                e.printStackTrace();
+            }
+        }
         // 시트 비우기 명령어 (운영진만 사용 가능)
         if (message.startsWith("!시트비우기 ")) {
             // 운영진 권한 체크
