@@ -44,17 +44,23 @@ public class DataManaGer {
             String userId = entry.getKey();
             net.dv8tion.jda.api.entities.Member member = guild.getMemberById(userId);
 
-            // [핵심 코드] 멤버 정보를 가져오는데 실패하면, 그냥 "알수없음"으로 덮지 말고
-            // 봇이 디스코드 서버에서 가져온 정보가 확실할 때만 닉네임을 사용
-            String displayName = (member != null && !member.getEffectiveName().contains("알수없음"))
-                    ? member.getEffectiveName()
-                    : "이름불러오기실패";
+            String displayName = (member != null) ? member.getEffectiveName() : nicknameCache.getOrDefault(userId, "알수없음");
+
+            // "알수없음" 이거나 "불러오기실패"인 경우 저장을 건너뜁니다 (기존 데이터 유지)
+            if (displayName.equals("알수없음") || displayName.contains("이름불러오기")) {
+                continue;
+            }
 
             values.add(Arrays.asList(userId, displayName, entry.getValue()));
         }
+
+        // [핵심] try-catch로 감싸야 빨간줄이 사라집니다!
         try {
-            GoogleSheetService.updateValues("시트1!A2:C", values);
+            if (!values.isEmpty()) {
+                GoogleSheetService.updateValues("시트1!A2:C", values);
+            }
         } catch (Exception e) {
+            System.err.println("구글 시트 저장 중 오류 발생: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -78,9 +84,9 @@ public class DataManaGer {
         if (titles == null) return;
         List<List<Object>> values = new ArrayList<>();
         for (Map.Entry<String, String> entry : titles.entrySet()) {
-            // [핵심] 저장할 때 무조건 대괄호를 제거하고 텍스트만 넣음
-            String rawTitleData = entry.getValue().replaceAll("[\\[\\]]", "");
-            values.add(Arrays.asList(entry.getKey(), rawTitleData));
+            // [강력] 모든 대괄호, 따옴표를 다 지워버림
+            String rawTitle = entry.getValue().replaceAll("[\\[\\]\"']", "");
+            values.add(Arrays.asList(entry.getKey(), rawTitle));
         }
         try {
             GoogleSheetService.updateValues("시트1!D2:E", values);
