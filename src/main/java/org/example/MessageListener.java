@@ -855,4 +855,99 @@ public class MessageListener extends ListenerAdapter {
             }
         }
 
+        if (message.startsWith("!칭호지급 ")) {
+            if (!event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+                event.getChannel().sendMessage("❌ 운영진만 사용할 수 있습니다.").queue();
+                return;
+            }
+
+            String[] parts = message.split(" ");
+            if (parts.length < 3) {
+                event.getChannel().sendMessage("사용법: `!칭호지급 [유저] [칭호이름]`").queue();
+                return;
+            }
+
+            // 1. 타겟 유저 ID 찾기 (멘션이나 닉네임)
+            String targetQuery = parts[1];
+            String titleName = parts[2];
+            String targetUserId = null;
+
+            // (기존의 유저 ID 찾기 로직 재사용)
+            for (net.dv8tion.jda.api.entities.Member m : event.getGuild().getMembers()) {
+                if (m.getEffectiveName().contains(targetQuery) || m.getAsMention().equals(targetQuery)) {
+                    targetUserId = m.getId();
+                    break;
+                }
+            }
+
+            if (targetUserId == null) {
+                event.getChannel().sendMessage("❌ 유저를 찾을 수 없습니다.").queue();
+                return;
+            }
+
+            // 2. 칭호 데이터 추가 (이미 있으면 뒤에 붙임)
+            String currentData = userTitles.getOrDefault(targetUserId, "");
+            String newEntry = titleName + "|" + getExpirationDate(14); // 14일짜리 지급
+            userTitles.put(targetUserId, currentData.isEmpty() ? newEntry : currentData + "," + newEntry);
+
+            DataManaGer.saveTitles(userTitles);
+
+            event.getChannel().sendMessage("✅ **" + targetQuery + "**님에게 **[" + titleName + "]** 칭호를 지급했습니다!").queue();
+        }
+
+        if (message.startsWith("!칭호삭제 ")) {
+            if (!event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+                event.getChannel().sendMessage("❌ 운영진만 사용할 수 있습니다.").queue();
+                return;
+            }
+
+            String[] parts = message.split(" ");
+            if (parts.length < 3) {
+                event.getChannel().sendMessage("사용법: `!칭호삭제 [유저] [칭호이름]`").queue();
+                return;
+            }
+
+            String targetQuery = parts[1];
+            String titleToRemove = parts[2];
+            String targetUserId = null;
+
+            for (net.dv8tion.jda.api.entities.Member m : event.getGuild().getMembers()) {
+                if (m.getEffectiveName().contains(targetQuery) || m.getAsMention().equals(targetQuery)) {
+                    targetUserId = m.getId();
+                    break;
+                }
+            }
+
+            if (targetUserId == null || !userTitles.containsKey(targetUserId)) {
+                event.getChannel().sendMessage("❌ 해당 유저나 유저의 칭호 데이터를 찾을 수 없습니다.").queue();
+                return;
+            }
+
+            // 3. 칭호 삭제 로직
+            String currentData = userTitles.get(targetUserId);
+            String[] entries = currentData.split(",");
+            StringBuilder sb = new StringBuilder();
+            boolean found = false;
+
+            for (String entry : entries) {
+                if (entry.split("\\|")[0].equals(titleToRemove)) {
+                    found = true; // 삭제할 칭호 발견
+                    continue;
+                }
+                if (sb.length() > 0) sb.append(",");
+                sb.append(entry);
+            }
+
+            if (!found) {
+                event.getChannel().sendMessage("❌ 해당 유저는 그 칭호를 가지고 있지 않습니다.").queue();
+                return;
+            }
+
+            if (sb.length() == 0) userTitles.remove(targetUserId);
+            else userTitles.put(targetUserId, sb.toString());
+
+            DataManaGer.saveTitles(userTitles);
+            event.getChannel().sendMessage("✅ **" + targetQuery + "**님의 **[" + titleToRemove + "]** 칭호를 삭제했습니다.").queue();
+        }
+
 }}
