@@ -6,21 +6,28 @@ import net.dv8tion.jda.api.entities.Member;
 
 public class DataManaGer {
 
-    // 로직을 단순화하여, 데이터를 가져올 때 null 체크를 확실하게 합니다.
+    public static HashMap<String, String> userNicknames = new HashMap<>();
+
     public static HashMap<String, Integer> loadPoints() {
         HashMap<String, Integer> map = new HashMap<>();
+        // 닉네임 맵 초기화
+        userNicknames.clear();
+
         try {
             List<List<Object>> values = GoogleSheetService.getValues("시트1!A2:C100");
             if (values != null) {
                 for (List<Object> row : values) {
-                    // size 체크를 3 이상으로 확실하게!
                     if (row.size() >= 3 && row.get(0) != null && row.get(2) != null) {
-                        map.put(row.get(0).toString(), Integer.parseInt(row.get(2).toString()));
+                        String userId = row.get(0).toString();
+                        String nickname = (row.get(1) != null) ? row.get(1).toString() : "알수없음";
+
+                        map.put(userId, Integer.parseInt(row.get(2).toString()));
+                        userNicknames.put(userId, nickname); // 닉네임 저장
                     }
                 }
             }
         } catch (Exception e) {
-            System.out.println("포인트 로드 중 에러: " + e.getMessage());
+            System.out.println("데이터 로드 중 에러: " + e.getMessage());
         }
         return map;
     }
@@ -28,11 +35,24 @@ public class DataManaGer {
     public static void savePoints(HashMap<String, Integer> points, Guild guild) {
         if (points == null || points.isEmpty()) return;
         List<List<Object>> values = new ArrayList<>();
+
         for (Map.Entry<String, Integer> entry : points.entrySet()) {
-            Member member = guild.getMemberById(entry.getKey());
-            String nickname = (member != null) ? member.getEffectiveName() : "알수없음";
-            values.add(Arrays.asList(entry.getKey(), nickname, entry.getValue()));
+            String userId = entry.getKey();
+
+            // 유저 찾기 시도
+            Member member = guild.getMemberById(userId);
+
+            // [핵심] 봇이 유저를 찾으면 닉네임 갱신, 못 찾으면 기존 닉네임 유지
+            if (member != null) {
+                userNicknames.put(userId, member.getEffectiveName());
+            }
+
+            // 맵에 닉네임이 없으면 "알수없음", 있으면 그것을 사용
+            String nameToSave = userNicknames.getOrDefault(userId, "알수없음");
+
+            values.add(Arrays.asList(userId, nameToSave, entry.getValue()));
         }
+
         try {
             GoogleSheetService.updateValues("시트1!A2:C", values);
         } catch (Exception e) {
