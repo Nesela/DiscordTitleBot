@@ -3,6 +3,7 @@ package org.example;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.events.guild.member.update.GuildMemberUpdateNicknameEvent;
 
 import javax.xml.crypto.Data;
 import java.util.HashMap;
@@ -127,16 +128,26 @@ public class MessageListener extends ListenerAdapter {
     public void onMessageReceived(MessageReceivedEvent event) {
         if (event.getAuthor().isBot()) return;
 
-        if (event.getMember() != null) {
-            DataManaGer.nicknameCache.put(event.getAuthor().getId(), event.getMember().getEffectiveName());
+        // 1. 멤버 객체를 변수에 담아둡니다.
+        net.dv8tion.jda.api.entities.Member member = event.getMember();
+
+        // 2. 멤버가 있을 때만 캐시를 갱신합니다.
+        if (member != null) {
+            DataManaGer.nicknameCache.put(event.getAuthor().getId(), member.getEffectiveName());
         }
 
-        // 공통 변수 (딱 한 번만 선언하세요!)
+        // 3. 변수 선언 시 member가 null인지 체크(삼항 연산자)하여 봇이 죽지 않게 합니다.
         String message = event.getMessage().getContentRaw();
         String userId = event.getAuthor().getId();
-        String currentNickname = event.getMember().getEffectiveName();
+
+        // member가 있으면 닉네임, 없으면 유저 이름(getName) 사용
+        String currentNickname = (member != null) ? member.getEffectiveName() : event.getAuthor().getName();
         String pureName = currentNickname.replaceAll("\\[.*?\\]", "").trim();
-        boolean isAdmin = event.getMember().hasPermission(Permission.ADMINISTRATOR);
+
+        // member가 있을 때만 권한을 체크하고, 없으면 자동으로 false
+        boolean isAdmin = (member != null) && member.hasPermission(Permission.ADMINISTRATOR);
+
+        // ... 이제 아래부터 기존의 if (message.startsWith("!포인트지급 ")) ... 쭉 이어가시면 됩니다.
 
         if (message.startsWith("!포인트지급 ")) {
             boolean isStaff = event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR);
@@ -164,10 +175,13 @@ public class MessageListener extends ListenerAdapter {
                     targetUserId = event.getMessage().getMentions().getMembers().get(0).getId();
                 } else {
                     // 2. 멘션이 없으면 닉네임 검색 (태그 제거 후 비교)
-                    for (net.dv8tion.jda.api.entities.Member member : event.getGuild().getMembers()) {
-                        String cleanName = member.getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
-                        if (cleanName.equalsIgnoreCase(targetQuery)) { // 대소문자 무시 정확히 일치
-                            targetUserId = member.getId();
+                    // 변수명을 member 대신 m으로 변경했습니다
+                    for (net.dv8tion.jda.api.entities.Member m : event.getGuild().getMembers()) {
+                        // 안쪽 코드도 m. 으로 수정!
+                        String cleanName = m.getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
+
+                        if (cleanName.equalsIgnoreCase(targetQuery)) {
+                            targetUserId = m.getId();
                             break;
                         }
                     }
@@ -200,9 +214,10 @@ public class MessageListener extends ListenerAdapter {
             String targetUserId = null;
 
             // 닉네임 검색만 수행
-            for (net.dv8tion.jda.api.entities.Member member : event.getGuild().getMembers()) {
-                if (member.getEffectiveName().contains(targetQuery)) {
-                    targetUserId = member.getId();
+            for (net.dv8tion.jda.api.entities.Member m : event.getGuild().getMembers()) {
+                // 안쪽에서 쓰는 변수도 똑같이 'm'으로 바꿔줘야 합니다
+                if (m.getEffectiveName().contains(targetQuery)) {
+                    targetUserId = m.getId();
                     break;
                 }
             }
@@ -563,11 +578,13 @@ public class MessageListener extends ListenerAdapter {
 
                 int actualBalance = entry.getValue() - userDebt.getOrDefault(targetId, 0);
 
-                // ID로 멤버를 찾아 닉네임을 표시 (없으면 ID 그대로 표시)
-                net.dv8tion.jda.api.entities.Member member = event.getGuild().getMemberById(targetId);
+                // [수정] 변수명을 member -> targetMember로 바꾸면 이름 충돌이 해결됩니다!
+                net.dv8tion.jda.api.entities.Member targetMember = event.getGuild().getMemberById(targetId);
+
                 String name = "알 수 없음";
-                if (member != null) {
-                    name = member.getEffectiveName();
+
+                if (targetMember != null) {
+                    name = targetMember.getEffectiveName();
                 } else if (DataManaGer.nicknameCache.containsKey(targetId)) {
                     name = DataManaGer.nicknameCache.get(targetId);
                 }
@@ -759,9 +776,11 @@ public class MessageListener extends ListenerAdapter {
                     // 3. 이제 안전하게 데이터를 싹 날리고 다시 저장합니다
                     GoogleSheetService.clearValues("시트1!A2:E");
 
+                    // 데이터 전부 저장
                     DataManaGer.savePoints(userPoints, event.getGuild());
                     DataManaGer.saveTitles(userTitles);
                     DataManaGer.saveDebts(userDebt);
+                    DataManaGer.saveDeadlines(debtDeadline); // <--- 이 한 줄을 꼭 넣으세요!
 
                     event.getChannel().sendMessage("✅ 시트 데이터가 현재 봇 상태로 강제 교체되었습니다!").queue();
                     System.out.println("[시스템] 데이터 복구 완료. 총 유저 수: " + userPoints.size());
