@@ -530,6 +530,7 @@ public class MessageListener extends ListenerAdapter {
         }
         //랭킹포인트
         if (message.equals("!랭킹")) {
+            DataManaGer.loadPoints();
             if (userPoints.isEmpty()) {
                 event.getChannel().sendMessage("아직 포인트 데이터가 없습니다!").queue();
                 return;
@@ -563,6 +564,7 @@ public class MessageListener extends ListenerAdapter {
         }
         //선물하기
         if (message.startsWith("!선물")) {
+            DataManaGer.loadPoints();
             String senderId = event.getAuthor().getId();
             String content = message.substring(3).trim();
             int lastSpaceIndex = content.lastIndexOf(" ");
