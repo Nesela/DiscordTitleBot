@@ -148,39 +148,45 @@ public class MessageListener extends ListenerAdapter {
             String content = message.substring("!포인트지급 ".length()).trim();
             int lastSpaceIndex = content.lastIndexOf(" ");
             if (lastSpaceIndex == -1) {
-                event.getChannel().sendMessage("사용법: `!포인트지급 [닉네임] [금액]`").queue();
+                event.getChannel().sendMessage("사용법: `!포인트지급 [닉네임 or @멘션] [금액]`").queue();
                 return;
             }
 
-            String targetName = content.substring(0, lastSpaceIndex);
+            String targetQuery = content.substring(0, lastSpaceIndex).trim(); // 닉네임 or 멘션
             String amountStr = content.substring(lastSpaceIndex + 1);
 
             try {
                 int amount = Integer.parseInt(amountStr);
-
-                // [중요] 닉네임으로 유저 찾아서 userId 구하기
                 String targetUserId = null;
-                for (net.dv8tion.jda.api.entities.Member member : event.getGuild().getMembers()) {
-                    if (member.getEffectiveName().contains(targetName)) {
-                        targetUserId = member.getId();
-                        break;
+
+                // 1. @멘션이 있다면 바로 ID 추출
+                if (!event.getMessage().getMentions().getMembers().isEmpty()) {
+                    targetUserId = event.getMessage().getMentions().getMembers().get(0).getId();
+                } else {
+                    // 2. 멘션이 없으면 닉네임 검색 (태그 제거 후 비교)
+                    for (net.dv8tion.jda.api.entities.Member member : event.getGuild().getMembers()) {
+                        String cleanName = member.getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
+                        if (cleanName.equalsIgnoreCase(targetQuery)) { // 대소문자 무시 정확히 일치
+                            targetUserId = member.getId();
+                            break;
+                        }
                     }
                 }
 
                 if (targetUserId == null) {
-                    event.getChannel().sendMessage("서버에서 해당 유저를 찾을 수 없습니다.").queue();
+                    event.getChannel().sendMessage("❌ 서버에서 해당 유저를 찾을 수 없습니다. (정확한 닉네임을 입력하거나 @멘션을 사용하세요)").queue();
                     return;
                 }
 
-                // userId를 키로 사용하여 저장
+                // 포인트 지급
                 int currentPoints = userPoints.getOrDefault(targetUserId, 0);
                 userPoints.put(targetUserId, currentPoints + amount);
                 DataManaGer.savePoints(userPoints, event.getGuild());
 
-                event.getChannel().sendMessage(" **[" + targetName + "]**님께 **" + amount + " P** 지급 완료!").queue();
+                event.getChannel().sendMessage("✅ **ID: " + targetUserId + "**님께 **" + amount + " P** 지급 완료! (현재 잔고: " + (currentPoints + amount) + " P)").queue();
 
             } catch (NumberFormatException e) {
-                event.getChannel().sendMessage(" **[오류]** 금액을 확인해주세요.").queue();
+                event.getChannel().sendMessage("❌ 금액을 숫자로 입력해주세요.").queue();
             }
         }
         //유저삭제
