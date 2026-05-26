@@ -802,13 +802,13 @@ public class MessageListener extends ListenerAdapter {
 
             if (chance < 5) { // 5% 확률: 대박
                 earn = 30;
-                resultMsg = "💎 **대박! 커다란 다이아몬드를 발견했습니다! (+50 P)**";
+                resultMsg = "💎 **대박! 커다란 다이아몬드를 발견했습니다! (+30 P)**";
             } else if (chance < 20) { // 15% 확률: 중박 (5%~19%)
                 earn = 10;
-                resultMsg = "⛏️ 꽤 괜찮은 광석을 캤습니다. (+30 P)";
+                resultMsg = "⛏️ 꽤 괜찮은 광석을 캤습니다. (+10 P)";
             } else if (chance < 70) { // 50% 확률: 쪽박 (20%~69%)
                 earn = 5;
-                resultMsg = "🪨 돌맹이만 잔뜩 캤네요... (+10 P)";
+                resultMsg = "🪨 돌맹이만 잔뜩 캤네요... (+5 P)";
             } else { // 30% 확률: 꽝 (70%~99%)
                 earn = 0;
                 resultMsg = "❌ **앗! 곡괭이가 부러져서 아무것도 못 캤습니다... (0 P)**";
