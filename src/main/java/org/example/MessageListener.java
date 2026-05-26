@@ -663,7 +663,7 @@ public class MessageListener extends ListenerAdapter {
 
                 if (amount > 100) {
                     event.getChannel().sendMessage("❌ 대출 한도를 초과했습니다! (최대 100 P까지 대출 가능)").queue();
-                    return; // 여기서 멈춤 (데이터 저장 안 함)
+                    return;
                 }
 
                 if (userDebt.containsKey(userId)) {
@@ -678,26 +678,27 @@ public class MessageListener extends ListenerAdapter {
                 userPoints.put(userId, currentPoints + amount);
                 userDebt.put(userId, currentDebt + amount);
                 debtDeadline.put(userId, System.currentTimeMillis() + (3L * 24 * 60 * 60 * 1000));
-                userTitles.put(userId, "빚쟁이");
 
-                // 2. 무조건 데이터부터 저장 (닉네임 변경 전)
+                // [수정] 칭호 추가 로직을 여기서 실행 (중복 안 되게!)
+                String currentData = userTitles.getOrDefault(userId, "");
+                if (!currentData.contains("빚쟁이")) {
+                    String debtEntry = "빚쟁이|" + getExpirationDate(3);
+                    userTitles.put(userId, currentData.isEmpty() ? debtEntry : currentData + "," + debtEntry);
+                }
+
+                // 2. 저장
                 DataManaGer.savePoints(userPoints, event.getGuild());
                 DataManaGer.saveDebts(userDebt);
                 DataManaGer.saveDeadlines(debtDeadline);
                 DataManaGer.saveTitles(userTitles);
 
-                // 3. 닉네임 변경 (이 부분에서 오류가 나도 포인트는 이미 저장됨)
-                try {
-                    String currentName = event.getMember().getEffectiveName();
-                    String cleanName = currentName.replaceAll("\\[.*?\\]", "").trim();
-                    if (!event.getMember().isOwner()) {
-                        event.getMember().modifyNickname("[빚쟁이] " + cleanName).queue();
-                    }
-                } catch (Exception e) {
-                    System.out.println("닉네임 변경 중 사소한 오류 발생: " + e.getMessage());
+                // 3. 닉네임 변경
+                String cleanName = event.getMember().getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
+                if (!event.getMember().isOwner()) {
+                    event.getMember().modifyNickname("[빚쟁이] " + cleanName).queue();
                 }
 
-                event.getChannel().sendMessage("💰 **" + amount + " P** 대출 완료! 현재 잔고: **" + (currentPoints + amount) + " P**").queue();
+                event.getChannel().sendMessage("💰 **" + amount + " P** 대출 완료!").queue();
 
             } catch (NumberFormatException e) {
                 event.getChannel().sendMessage("❌ 금액을 숫자로 입력해주세요!").queue();
@@ -716,39 +717,61 @@ public class MessageListener extends ListenerAdapter {
 
             int debt = userDebt.get(userId);
             int myPoint = userPoints.getOrDefault(userId, 0);
+            int newPoint = myPoint - debt; // 새로운 잔고 계산
 
-            // 2. 포인트 계산 및 차감
-            int newPoint = myPoint - debt;
+            // 2. 데이터 업데이트 (포인트, 빚, 마감일 삭제)
             userPoints.put(userId, newPoint);
-
-            // 3. 빚 관련 데이터 삭제
             userDebt.remove(userId);
             debtDeadline.remove(userId);
 
-            // 4. 신분(칭호) 처리: 빚쟁이와 노예를 모두 삭제
-            String currentTitle = userTitles.getOrDefault(userId, "");
-            if (currentTitle.equals("빚쟁이") || currentTitle.equals("노예")) {
-                userTitles.remove(userId);
-            }
+            // 3. 기존 칭호에서 '빚쟁이'와 '노예' 제거
+            String currentData = userTitles.getOrDefault(userId, "");
+            StringBuilder sb = new StringBuilder();
 
-            // 5. 닉네임 원상복구
-            String cleanName = event.getMember().getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
-            if (!event.getMember().isOwner()) {
-                if (newPoint < 0) {
-                    userTitles.put(userId, "노예");
-                    event.getMember().modifyNickname("[노예] " + cleanName).queue();
-                } else {
-                    event.getMember().modifyNickname(cleanName).queue();
+            if (!currentData.isEmpty()) {
+                for (String entry : currentData.split(",")) {
+                    // '빚쟁이'나 '노예'가 아닌 것들만 남김
+                    if (!entry.startsWith("빚쟁이|") && !entry.startsWith("노예|")) {
+                        if (sb.length() > 0) sb.append(",");
+                        sb.append(entry);
+                    }
                 }
             }
 
-            // 6. 시트 저장
+            // 4. 만약 잔고가 마이너스면 '노예' 추가
+            if (newPoint < 0) {
+                String slaveEntry = "노예|" + getExpirationDate(999);
+                if (sb.length() > 0) sb.append(",");
+                sb.append(slaveEntry);
+            }
+
+            // 5. 칭호 저장
+            String finalTitles = sb.toString();
+            if (finalTitles.isEmpty()) userTitles.remove(userId);
+            else userTitles.put(userId, finalTitles);
+
+            // 6. 모든 데이터 저장 (딱 한 번만 실행!)
             DataManaGer.savePoints(userPoints, event.getGuild());
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
             DataManaGer.saveTitles(userTitles);
 
-            // 7. 결과 메시지
+            // 7. 닉네임 변경 (노예면 [노예], 아니면 남은 칭호 중 첫 번째)
+            String cleanName = event.getMember().getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
+            String newNickname = cleanName;
+
+            if (newPoint < 0) {
+                newNickname = "[노예] " + cleanName;
+            } else if (!finalTitles.isEmpty()) {
+                String firstTitle = finalTitles.split(",")[0].split("\\|")[0];
+                newNickname = "[" + firstTitle + "] " + cleanName;
+            }
+
+            if (!event.getMember().isOwner()) {
+                event.getMember().modifyNickname(newNickname).queue();
+            }
+
+            // 8. 결과 메시지
             if (newPoint < 0) {
                 event.getChannel().sendMessage("⛓️ 빚 " + debt + " P를 상환했지만, 잔고가 마이너스이므로 **[노예]** 신분이 됩니다. 현재 잔고: **" + newPoint + " P**").queue();
             } else {
