@@ -719,15 +719,23 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
-            // 1. 서버 멤버 전원에게서 최신 닉네임을 긁어와 캐시에 강제 저장
-            for (net.dv8tion.jda.api.entities.Member member : event.getGuild().getMembers()) {
-                DataManaGer.nicknameCache.put(member.getId(), member.getEffectiveName());
+            event.getChannel().sendMessage("⏳ 데이터를 시트에 강제 동기화 중입니다...").queue();
+
+            try {
+                // 1. 기존 시트 데이터 싹 날리기 (데이터 오염 방지)
+                GoogleSheetService.clearValues("시트1!A2:E");
+
+                // 2. 현재 메모리에 있는 데이터로 강제 저장
+                DataManaGer.savePoints(userPoints, event.getGuild());
+                DataManaGer.saveTitles(userTitles);
+                DataManaGer.saveDebts(userDebt);
+
+                event.getChannel().sendMessage("✅ 시트 데이터가 현재 봇 상태로 강제 교체되었습니다!").queue();
+                System.out.println("[시스템] 데이터 복구 완료. 총 유저 수: " + userPoints.size());
+            } catch (Exception e) {
+                event.getChannel().sendMessage("❌ 오류 발생: " + e.getMessage()).queue();
+                e.printStackTrace(); // 콘솔에 상세 오류 출력
             }
-
-            // 2. 강제로 시트 저장 실행 (이때 nicknameCache에 방금 긁어온 진짜 이름들이 들어감!)
-            DataManaGer.savePoints(userPoints, event.getGuild());
-
-            event.getChannel().sendMessage("✅ 완료! 서버의 모든 유저 데이터를 다시 불러와 시트의 '알수없음'을 정리했습니다.").queue();
         }
         // 시트 비우기 명령어 (운영진만 사용 가능)
         if (message.startsWith("!시트비우기 ")) {
