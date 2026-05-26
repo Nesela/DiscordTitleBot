@@ -39,6 +39,8 @@ public class DataManaGer {
     }
 
     public static void savePoints(HashMap<String, Integer> points, net.dv8tion.jda.api.entities.Guild guild) {
+        System.out.println("[디버그] 봇이 인식 중인 전체 멤버 수: " + guild.getMembers().size());
+
         List<List<Object>> values = new ArrayList<>();
         for (Map.Entry<String, Integer> entry : points.entrySet()) {
             String userId = entry.getKey();
