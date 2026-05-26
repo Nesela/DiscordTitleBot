@@ -16,6 +16,8 @@ public class MessageListener extends ListenerAdapter {
     private HashMap<String, String> userTitles = new HashMap<>();
     private HashMap<String, Integer> userDebt = new HashMap<>();
     private HashMap<String, Long> debtDeadline = new HashMap<>();
+    private java.util.Random random = new java.util.Random();
+    private HashMap<String, Long> workCooldowns = new HashMap<>();
 
     private HashMap<String, LocalDate> lastCheckInDates = new HashMap<>();
 
@@ -289,6 +291,7 @@ public class MessageListener extends ListenerAdapter {
             event.getChannel().sendMessage("\uD83C\uDFAE [종겜방 봇 명령어 안내]\n" +
                     "💰 **포인트 & 도박**\n" +
                     "1. `!출첵` : 출석체크를 진행하여 포인트를 획득합니다.\n" +
+                    "1. `!채굴` : 채굴을 진행해 포인트를 획득합니다.\n" +
                     "1. `!포인트` : 내 보유 포인트를 확인합니다.\n" +
                     "1. `!랭킹` : 현재 보유 포인트 랭킹을 확인합니다.\n" +
                     "1. `!선물` : 포인트의 선물이 가능합니다.\n" +
@@ -778,6 +781,47 @@ public class MessageListener extends ListenerAdapter {
                 event.getChannel().sendMessage("✅ 빚 " + debt + " P를 성공적으로 상환했습니다! **[빚쟁이]** 칭호가 해제되었습니다.").queue();
             }
         }
+
+
+        if (message.equals("!채굴")) {
+            userId = event.getAuthor().getId();
+            long now = System.currentTimeMillis();
+            long cooldown = 3 * 60 * 1000; // 1분
+
+            // 쿨타임 체크
+            if (workCooldowns.containsKey(userId) && (now - workCooldowns.get(userId) < cooldown)) {
+                long remaining = (cooldown - (now - workCooldowns.get(userId))) / 1000;
+                event.getChannel().sendMessage("⏳ **" + remaining + "초** 뒤에 다시 채굴할 수 있습니다!").queue();
+                return;
+            }
+
+            // [핵심] 랜덤 보상 시스템
+            int chance = random.nextInt(100); // 0~99
+            int earn = 0;
+            String resultMsg = "";
+
+            if (chance < 5) { // 5% 확률: 대박
+                earn = 30;
+                resultMsg = "💎 **대박! 커다란 다이아몬드를 발견했습니다! (+50 P)**";
+            } else if (chance < 20) { // 15% 확률: 중박 (5%~19%)
+                earn = 10;
+                resultMsg = "⛏️ 꽤 괜찮은 광석을 캤습니다. (+30 P)";
+            } else if (chance < 70) { // 50% 확률: 쪽박 (20%~69%)
+                earn = 5;
+                resultMsg = "🪨 돌맹이만 잔뜩 캤네요... (+10 P)";
+            } else { // 30% 확률: 꽝 (70%~99%)
+                earn = 0;
+                resultMsg = "❌ **앗! 곡괭이가 부러져서 아무것도 못 캤습니다... (0 P)**";
+            }
+
+            // 포인트 업데이트 및 저장
+            int current = userPoints.getOrDefault(userId, 0);
+            userPoints.put(userId, current + earn);
+            workCooldowns.put(userId, now);
+
+            DataManaGer.savePoints(userPoints, event.getGuild());
+            event.getChannel().sendMessage(resultMsg + "\n(현재 잔고: **" + (current + earn) + " P**)").queue();
+
         //데이터복구
         if (message.equals("!데이터복구")) {
             if (!event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
@@ -950,4 +994,6 @@ public class MessageListener extends ListenerAdapter {
             event.getChannel().sendMessage("✅ **" + targetQuery + "**님의 **[" + titleToRemove + "]** 칭호를 삭제했습니다.").queue();
         }
 
-}}
+
+
+}}}
