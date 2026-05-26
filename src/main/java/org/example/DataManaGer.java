@@ -10,7 +10,7 @@ public class DataManaGer {
 
     public static HashMap<String, Integer> loadPoints() {
         HashMap<String, Integer> map = new HashMap<>();
-        nicknameCache.clear(); // 데이터를 새로 읽을 때 캐시 초기화
+        // nicknameCache.clear(); // [주의] 무조건 다 지우지 마세요!
 
         try {
             List<List<Object>> values = GoogleSheetService.getValues("시트1!A2:C100");
@@ -22,7 +22,13 @@ public class DataManaGer {
                         int point = Integer.parseInt(row.get(2).toString());
 
                         map.put(userId, point);
-                        nicknameCache.put(userId, nickname);
+
+                        // [수정 포인트] "알수없음"이 아닐 때만 캐시에 넣습니다.
+                        // 이렇게 하면 봇이 처음에 이름을 모를 땐 캐시가 비어있게 되고,
+                        // 나중에 봇이 서버에서 멤버 정보를 가져올 때 자연스럽게 진짜 이름이 채워집니다.
+                        if (!nickname.equals("알수없음")) {
+                            nicknameCache.put(userId, nickname);
+                        }
                     }
                 }
             }
@@ -32,17 +38,19 @@ public class DataManaGer {
         return map;
     }
 
-    public static void savePoints(HashMap<String, Integer> points, Guild guild) {
+    public static void savePoints(HashMap<String, Integer> points, net.dv8tion.jda.api.entities.Guild guild) {
         List<List<Object>> values = new ArrayList<>();
         for (Map.Entry<String, Integer> entry : points.entrySet()) {
             String userId = entry.getKey();
-            int point = entry.getValue();
-            Member member = guild.getMemberById(userId);
-            if (member != null) {
-                nicknameCache.put(userId, member.getEffectiveName());
-            }
-            String nameToSave = nicknameCache.getOrDefault(userId, "알수없음");
-            values.add(Arrays.asList(userId, nameToSave, point));
+            net.dv8tion.jda.api.entities.Member member = guild.getMemberById(userId);
+
+            // [핵심 코드] 멤버 정보를 가져오는데 실패하면, 그냥 "알수없음"으로 덮지 말고
+            // 봇이 디스코드 서버에서 가져온 정보가 확실할 때만 닉네임을 사용
+            String displayName = (member != null && !member.getEffectiveName().contains("알수없음"))
+                    ? member.getEffectiveName()
+                    : "이름불러오기실패";
+
+            values.add(Arrays.asList(userId, displayName, entry.getValue()));
         }
         try {
             GoogleSheetService.updateValues("시트1!A2:C", values);
