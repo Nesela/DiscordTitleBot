@@ -590,41 +590,45 @@ public class MessageListener extends ListenerAdapter {
         //랭킹포인트
         if (message.equals("!랭킹")) {
             DataManaGer.loadPoints();
-            if (userPoints.isEmpty()) {
-                event.getChannel().sendMessage("아직 포인트 데이터가 없습니다!").queue();
+
+            // 1. 서버에 있는 사람들만 담을 리스트 생성
+            java.util.List<java.util.Map.Entry<String, Integer>> validRanking = new java.util.ArrayList<>();
+
+            for (java.util.Map.Entry<String, Integer> entry : userPoints.entrySet()) {
+                String targetId = entry.getKey();
+                // 서버에 존재하는 멤버인지 확인
+                if (event.getGuild().getMemberById(targetId) != null) {
+                    validRanking.add(entry);
+                }
+            }
+
+            if (validRanking.isEmpty()) {
+                event.getChannel().sendMessage("아직 서버 내에 포인트 데이터가 없습니다!").queue();
                 return;
             }
 
-            java.util.List<java.util.Map.Entry<String, Integer>> ranking = new java.util.ArrayList<>(userPoints.entrySet());
-
-            ranking.sort((o1, o2) -> {
+            // 2. 서버에 있는 사람들끼리만 정렬
+            validRanking.sort((o1, o2) -> {
                 int b1 = o1.getValue() - userDebt.getOrDefault(o1.getKey(), 0);
                 int b2 = o2.getValue() - userDebt.getOrDefault(o2.getKey(), 0);
                 return Integer.compare(b2, b1);
             });
 
+            // 3. 정렬된 리스트에서 상위 10명만 출력
             StringBuilder sb = new StringBuilder();
-            sb.append("\uD83C\uDFC6 **[종겜방 실제 잔고 랭킹 (Top 10)]**\n\n");
+            sb.append("\uD83C\uDFC6 **[서버 내 실제 잔고 랭킹 (Top 10)]**\n\n");
 
-            for (int i = 0; i < Math.min(ranking.size(), 10); i++) {
-                java.util.Map.Entry<String, Integer> entry = ranking.get(i);
+            for (int i = 0; i < Math.min(validRanking.size(), 10); i++) {
+                java.util.Map.Entry<String, Integer> entry = validRanking.get(i);
                 String targetId = entry.getKey();
-
                 int actualBalance = entry.getValue() - userDebt.getOrDefault(targetId, 0);
 
-                // [수정] 변수명을 member -> targetMember로 바꾸면 이름 충돌이 해결됩니다!
                 net.dv8tion.jda.api.entities.Member targetMember = event.getGuild().getMemberById(targetId);
-
-                String name = "알 수 없음";
-
-                if (targetMember != null) {
-                    name = targetMember.getEffectiveName();
-                } else if (DataManaGer.nicknameCache.containsKey(targetId)) {
-                    name = DataManaGer.nicknameCache.get(targetId);
-                }
+                String name = (targetMember != null) ? targetMember.getEffectiveName() : "알 수 없음";
 
                 sb.append(String.format("%d등: **%s** %d P\n", i + 1, name, actualBalance));
             }
+
             event.getChannel().sendMessage(sb.toString()).queue();
             return;
         }
