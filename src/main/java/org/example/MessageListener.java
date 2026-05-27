@@ -1194,6 +1194,53 @@ public class MessageListener extends ListenerAdapter {
 
         }
 
+        if (message.startsWith("!지급")) {
+            // 1. 관리자 권한 확인
+            if (!event.getMember().hasPermission(net.dv8tion.jda.api.Permission.ADMINISTRATOR)) {
+                event.getChannel().sendMessage("❌ 이 명령어는 관리자만 사용할 수 있습니다.").queue();
+                return;
+            }
+
+            // 2. 입력 형식 확인 및 멘션 유무 확인
+            String[] args = message.split(" ");
+            if (args.length < 4 || event.getMessage().getMentions().getMembers().isEmpty()) {
+                event.getChannel().sendMessage("⚠️ **사용법:** !지급 @유저 [보호권/곡괭이] [값]").queue();
+                return;
+            }
+
+            String targetId = event.getMessage().getMentions().getMembers().get(0).getId();
+            String type = args[2];
+            int value;
+
+            try {
+                value = Integer.parseInt(args[3]);
+            } catch (NumberFormatException e) {
+                event.getChannel().sendMessage("⚠️ [값]에는 숫자만 입력해주세요.").queue();
+                return;
+            }
+
+            // 3. 종류별 처리
+            if (type.equals("보호권")) {
+                // 기존 데이터 로드 후 업데이트
+                protectionTickets = DataManaGer.loadProtectionTickets();
+                int current = protectionTickets.getOrDefault(targetId, 0);
+                protectionTickets.put(targetId, current + value);
+
+                DataManaGer.saveProtectionTickets(protectionTickets);
+                event.getChannel().sendMessage("🛡️ 지급 완료: <@" + targetId + ">님께 보호권 " + value + "장을 추가했습니다.").queue();
+
+            } else if (type.equals("곡괭이")) {
+                // 레벨 설정
+                pickaxeLevels.put(targetId, value);
+
+                DataManaGer.savePickaxeLevels(pickaxeLevels);
+                event.getChannel().sendMessage("⛏️ 지급 완료: <@" + targetId + ">님의 곡괭이를 " + value + "레벨로 설정했습니다.").queue();
+
+            } else {
+                event.getChannel().sendMessage("⚠️ 알 수 없는 종류입니다. [보호권] 또는 [곡괭이]를 입력하세요.").queue();
+            }
+        }
+
 
     }
 
@@ -1258,6 +1305,7 @@ public class MessageListener extends ListenerAdapter {
             DataManaGer.savePoints(userPoints, event.getGuild());
         }
     }
+
 
     private void finishRoulette(net.dv8tion.jda.api.entities.channel.middleman.MessageChannel channel, net.dv8tion.jda.api.entities.Guild guild) {
         isRouletteOpen = false;
