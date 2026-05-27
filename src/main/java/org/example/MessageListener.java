@@ -842,13 +842,13 @@ public class MessageListener extends ListenerAdapter {
             }
 
             if (chance < diamondChance) {
-                earn = 50 + bonus;
+                earn = 30 + bonus;
                 resultMsg = "💎 **대박! 커다란 다이아몬드를 발견했습니다! (+" + earn + " P)**";
             } else if (chance < 20) {
-                earn = 30 + bonus;
+                earn = 10 + bonus;
                 resultMsg = "⛏️ 꽤 괜찮은 광석을 캤습니다. (+" + earn + " P)";
             } else if (chance < 70) {
-                earn = 10 + bonus;
+                earn = 5 + bonus;
                 resultMsg = "🪨 돌맹이만 잔뜩 캤네요... (+" + earn + " P)";
             } else {
                 earn = 0; // 꽝은 보너스 없음
@@ -878,8 +878,9 @@ public class MessageListener extends ListenerAdapter {
             int successRate = 100 - (currentLevel * 15);
             if (successRate < 5) successRate = 5; // 최소 5%는 보장
 
-            if (userPoints.getOrDefault(userId, 0) < cost) {
-                event.getChannel().sendMessage("❌ 포인트가 부족합니다!").queue();
+            int myPoints = userPoints.getOrDefault(userId, 0);
+            if (myPoints < cost) {
+                event.getChannel().sendMessage("❌ **포인트가 부족합니다!**\n현재 보유: " + myPoints + " P / **필요 포인트: " + cost + " P**").queue();
                 return;
             }
 
