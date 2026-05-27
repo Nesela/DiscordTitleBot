@@ -165,7 +165,7 @@ public class MessageListener extends ListenerAdapter {
 
         if (message.equals("!강화")) {
             int currentLevel = pickaxeLevels.getOrDefault(userId, 1);
-            int cost = currentLevel * 100;
+            int cost = currentLevel * 20;
             int successRate = 100 - (currentLevel * 15);
             if (successRate < 5) successRate = 5;
 
