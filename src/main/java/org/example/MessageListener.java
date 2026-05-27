@@ -1113,6 +1113,7 @@ public class MessageListener extends ListenerAdapter {
             if (random.nextInt(100) < successRate) {
                 pickaxeLevels.put(userId, currentLevel + 1);
                 event.editMessage("✅ **강화 성공!** " + currentLevel + " → " + (currentLevel + 1) + "레벨!").setComponents().queue();
+                DataManaGer.savePickaxeLevels(pickaxeLevels);
             } else {
                 int tickets = protectionTickets.getOrDefault(userId, 0);
                 if (tickets > 0) {
