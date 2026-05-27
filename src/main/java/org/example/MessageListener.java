@@ -581,48 +581,56 @@ public class MessageListener extends ListenerAdapter {
 
         // 2. 룰렛 참여
         if (message.startsWith("!참여 ")) {
-            // 1. 모집 중인지 먼저 확인
+            // 1. 모집 중인지 확인
             if (!isRouletteOpen) {
                 event.getChannel().sendMessage("❌ 지금은 룰렛 모집 시간이 아닙니다.").queue();
                 return;
             }
 
-            // 2. 메시지 자르기 (가장 먼저 실행되어야 함!)
+            // 2. 메시지 자르기
             String[] args = message.split(" ");
             if (args.length < 3) {
                 event.getChannel().sendMessage("사용법: !참여 [금액] [타겟(2, 3, 5, 10, 20)]").queue();
                 return;
             }
 
-            // 3. 변수 정의 및 검증
+            // 3. [통합] 금액 파싱 및 유효성 검사
+            int betAmount;
+            try {
+                betAmount = Integer.parseInt(args[1]);
+            } catch (NumberFormatException e) {
+                event.getChannel().sendMessage("❌ 금액은 숫자로만 입력해주세요.").queue();
+                return;
+            }
+
+            if (betAmount <= 0) {
+                event.getChannel().sendMessage("❌ **1 P 이상의 금액만 배팅 가능합니다!**").queue();
+                return;
+            }
+
+            // 4. 타겟 검증
             String target = args[2].trim();
             List<String> validTargets = Arrays.asList("2", "3", "5", "10", "20");
-
             if (!validTargets.contains(target)) {
                 event.getChannel().sendMessage("❌ 2, 3, 5, 10, 20배 중에서 선택하세요!").queue();
                 return;
             }
 
-            // 4. 포인트 계산 및 로직
-            try {
-                int betAmount = Integer.parseInt(args[1]);
-                userId = event.getAuthor().getId();
+            // 5. 포인트 계산 및 최종 처리
+            userId = event.getAuthor().getId(); // 여기서 userId를 가져옵니다.
 
-                // 보유 포인트 체크
-                if (userPoints.getOrDefault(userId, 0) < betAmount) {
-                    event.getChannel().sendMessage("❌ 포인트가 부족합니다!").queue();
-                    return;
-                }
-
-                // 포인트 차감 및 기록
-                userPoints.put(userId, userPoints.getOrDefault(userId, 0) - betAmount);
-                currentBets.put(userId, currentBets.getOrDefault(userId, 0) + betAmount);
-                betTargets.put(userId, target); // 어디에 걸었는지 저장!
-
-                event.getChannel().sendMessage("✅ " + event.getAuthor().getName() + "님 [" + target + "배]에 " + betAmount + "P 참여!").queue();
-            } catch (NumberFormatException e) {
-                event.getChannel().sendMessage("❌ 금액은 숫자로 입력해주세요.").queue();
+            // 보유 포인트 체크
+            if (userPoints.getOrDefault(userId, 0) < betAmount) {
+                event.getChannel().sendMessage("❌ 포인트가 부족합니다!").queue();
+                return;
             }
+
+            // 포인트 차감 및 기록
+            userPoints.put(userId, userPoints.getOrDefault(userId, 0) - betAmount);
+            currentBets.put(userId, currentBets.getOrDefault(userId, 0) + betAmount);
+            betTargets.put(userId, target);
+
+            event.getChannel().sendMessage("✅ " + event.getAuthor().getName() + "님 [" + target + "배]에 " + betAmount + "P 참여!").queue();
             return;
         }
 
