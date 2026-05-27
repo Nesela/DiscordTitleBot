@@ -736,13 +736,14 @@ public class MessageListener extends ListenerAdapter {
                 String targetId = entry.getKey();
                 int actualBalance = entry.getValue() - userDebt.getOrDefault(targetId, 0);
 
-                // 서버 멤버 확인
-                net.dv8tion.jda.api.entities.Member targetMember = event.getGuild().getMemberById(targetId);
+                // 1. 서버 멤버 정보를 가져옵니다.
+                net.dv8tion.jda.api.entities.Member m = event.getGuild().getMemberById(targetId);
 
-                // 핵심: 멤버가 있으면 닉네임 출력, 없으면 ID를 출력 (더 이상 '알 수 없음'은 안 나옵니다)
-                String name = (targetMember != null) ? targetMember.getEffectiveName() : targetId;
+                // 2. [핵심] 서버에 있으면 닉네임, 없으면 '탈퇴한 유저'로 표시합니다.
+                String displayName = (member != null) ? member.getEffectiveName() : "탈퇴한 유저";
 
-                sb.append(String.format("%d등: **%s** %d P\n", i + 1, name, actualBalance));
+                // 3. 닉네임(혹은 탈퇴한 유저)을 출력합니다.
+                sb.append(String.format("%d등: **%s** %d P\n", i + 1, displayName, actualBalance));
             }
 
             event.getChannel().sendMessage(sb.toString()).queue();
