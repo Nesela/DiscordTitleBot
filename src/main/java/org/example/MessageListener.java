@@ -3,28 +3,39 @@ package org.example;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
-import net.dv8tion.jda.api.events.guild.member.update.GuildMemberUpdateNicknameEvent;
 import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import net.dv8tion.jda.api.interactions.components.ActionRow;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 
 
-import javax.xml.crypto.Data;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.Map;
+import java.util.HashMap; // 기존에 HashMap도 쓰고 계시다면 이것도 필요합니다.
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.concurrent.*;
+import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 
 
 public class MessageListener extends ListenerAdapter {
     // 1. 여기서 바로 로드하지 말고 변수만 선언하세요.
+
     private HashMap<String, Integer> userPoints = new HashMap<>(); // 선언 시 바로 로드 금지!
     private HashMap<String, String> userTitles = new HashMap<>();
     private HashMap<String, Integer> userDebt = new HashMap<>();
     private HashMap<String, Long> debtDeadline = new HashMap<>();
-    private java.util.Random random = new java.util.Random();
+    private final java.util.Random random = new java.util.Random();
     private HashMap<String, Long> workCooldowns = new HashMap<>();
     private HashMap<String, Integer> pickaxeLevels = new HashMap<>(); // 유저별 곡괭이 레벨
     private HashMap<String, Integer> protectionTickets = new HashMap<>(); // 유저별 보유한 강보권 수
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final Map<String, Integer> currentBets = new ConcurrentHashMap<>();
+    private boolean isRouletteOpen = false;
+    private final Map<String, String> betTargets = new ConcurrentHashMap<>();
+    private long rouletteEndTime = 0;
 
     private HashMap<String, LocalDate> lastCheckInDates = new HashMap<>();
     // 가격표 변수는 그대로 두셔도 됩니다.
@@ -145,6 +156,7 @@ public class MessageListener extends ListenerAdapter {
         if (event.getAuthor().isBot()) return;
         String message = event.getMessage().getContentRaw();
         String userId = event.getAuthor().getId();
+        var channel = event.getChannel();
 
         // 1. 멤버 객체를 변수에 담아둡니다.
         net.dv8tion.jda.api.entities.Member member = event.getMember();
@@ -220,40 +232,36 @@ public class MessageListener extends ListenerAdapter {
         }
         //유저삭제
         if (message.startsWith("!유저삭제 ")) {
+            // 1. 권한 체크 (방장님 코드 유지)
             if (!event.getMember().isOwner() && !event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
                 event.getChannel().sendMessage("서버 운영진만 사용할 수 있습니다.").queue();
                 return;
             }
 
-            String targetQuery = message.substring(6).trim(); // 6글자 "!유저삭제 " 제외
-            String targetUserId = null;
+            // 2. 멘션(<@123456789>)이나 ID를 바로 추출
+            // !유저삭제 <@123456789> 라고 치면 123456789만 남깁니다.
+            String targetUserId = message.replace("!유저삭제 ", "").replaceAll("[<@!>]", "").trim();
 
-            // 닉네임 검색만 수행
-            for (net.dv8tion.jda.api.entities.Member m : event.getGuild().getMembers()) {
-                // 안쪽에서 쓰는 변수도 똑같이 'm'으로 바꿔줘야 합니다
-                if (m.getEffectiveName().contains(targetQuery)) {
-                    targetUserId = m.getId();
-                    break;
-                }
-            }
-
-            if (targetUserId == null) {
-                event.getChannel().sendMessage("❌ 해당 유저를 찾을 수 없습니다.").queue();
+            // 3. 데이터가 실제로 있는지 확인
+            if (!userPoints.containsKey(targetUserId)) {
+                event.getChannel().sendMessage("❌ 해당 ID를 가진 유저의 데이터가 없습니다.").queue();
                 return;
             }
 
-            // 데이터 삭제
+            // 4. 데이터 삭제 (서버에 있든 없든 상관없이 삭제!)
             userPoints.remove(targetUserId);
             userTitles.remove(targetUserId);
             userDebt.remove(targetUserId);
             debtDeadline.remove(targetUserId);
 
+            // 5. 저장
             DataManaGer.savePoints(userPoints, event.getGuild());
             DataManaGer.saveTitles(userTitles);
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
 
-            event.getChannel().sendMessage("✅ **ID: " + targetUserId + "** 유저의 모든 데이터가 삭제되었습니다.").queue();
+            event.getChannel().sendMessage("✅ **ID: " + targetUserId + "** 유저의 모든 데이터가 깔끔하게 삭제되었습니다.").queue();
+            return;
         }
 
         if (!isAdmin) {
@@ -539,6 +547,80 @@ public class MessageListener extends ListenerAdapter {
             event.getChannel().sendMessage(sb.toString()).queue();
         }
 
+        // 1. 룰렛 열기
+        if (message.equals("!룰렛열기")) {
+            if (isRouletteOpen) {
+                event.getChannel().sendMessage("⚠️ 이미 룰렛이 진행 중입니다!").queue();
+                return;
+            }
+            isRouletteOpen = true;
+            currentBets.clear();
+            betTargets.clear(); // 베팅 타겟도 초기화
+            rouletteEndTime = System.currentTimeMillis() + 60000;
+
+            String rules = "🎡 **[러스트 룰렛 오픈!]** 🎡\n" +
+                    "참여 명령어: `!참여 [금액] [배수]`\n\n" +
+                    "📊 **[배당 및 당첨 확률]**\n" +
+                    "• 1배 : 50%\n" +
+                    "• 3배 : 25%\n" +
+                    "• 5배 : 15%\n" +
+                    "• 10배 : 7%\n" +
+                    "• 20배 : 3%\n\n" +
+                    "60초 동안 모집합니다! 참여하세요!";
+
+            event.getChannel().sendMessage(rules).queue();
+
+            scheduler.schedule(() -> finishRoulette(event.getChannel(), event.getGuild()), 60, TimeUnit.SECONDS);
+            return;
+        }
+
+        // 2. 룰렛 참여
+        if (message.startsWith("!참여 ")) {
+            // 1. 모집 중인지 먼저 확인
+            if (!isRouletteOpen) {
+                event.getChannel().sendMessage("❌ 지금은 룰렛 모집 시간이 아닙니다.").queue();
+                return;
+            }
+
+            // 2. 메시지 자르기 (가장 먼저 실행되어야 함!)
+            String[] args = message.split(" ");
+            if (args.length < 3) {
+                event.getChannel().sendMessage("사용법: !참여 [금액] [타겟(1, 3, 5, 10, 20)]").queue();
+                return;
+            }
+
+            // 3. 변수 정의 및 검증
+            String target = args[2].trim();
+            List<String> validTargets = Arrays.asList("1", "3", "5", "10", "20");
+
+            if (!validTargets.contains(target)) {
+                event.getChannel().sendMessage("❌ 1, 3, 5, 10, 20배 중에서 선택하세요!").queue();
+                return;
+            }
+
+            // 4. 포인트 계산 및 로직
+            try {
+                int betAmount = Integer.parseInt(args[1]);
+                userId = event.getAuthor().getId();
+
+                // 보유 포인트 체크
+                if (userPoints.getOrDefault(userId, 0) < betAmount) {
+                    event.getChannel().sendMessage("❌ 포인트가 부족합니다!").queue();
+                    return;
+                }
+
+                // 포인트 차감 및 기록
+                userPoints.put(userId, userPoints.getOrDefault(userId, 0) - betAmount);
+                currentBets.put(userId, currentBets.getOrDefault(userId, 0) + betAmount);
+                betTargets.put(userId, target); // 어디에 걸었는지 저장!
+
+                event.getChannel().sendMessage("✅ " + event.getAuthor().getName() + "님 [" + target + "배]에 " + betAmount + "P 참여!").queue();
+            } catch (NumberFormatException e) {
+                event.getChannel().sendMessage("❌ 금액은 숫자로 입력해주세요.").queue();
+            }
+            return;
+        }
+
 // 도박 홀짝
         if (message.startsWith("!홀짝")) {
             userId = event.getAuthor().getId();
@@ -591,40 +673,33 @@ public class MessageListener extends ListenerAdapter {
         if (message.equals("!랭킹")) {
             DataManaGer.loadPoints();
 
-            // 1. 서버에 있는 사람들만 담을 리스트 생성
-            java.util.List<java.util.Map.Entry<String, Integer>> validRanking = new java.util.ArrayList<>();
+            // 1. 저장된 모든 데이터를 리스트로 변환
+            java.util.List<java.util.Map.Entry<String, Integer>> rankingList = new java.util.ArrayList<>(userPoints.entrySet());
 
-            for (java.util.Map.Entry<String, Integer> entry : userPoints.entrySet()) {
-                String targetId = entry.getKey();
-                // 서버에 존재하는 멤버인지 확인
-                if (event.getGuild().getMemberById(targetId) != null) {
-                    validRanking.add(entry);
-                }
-            }
-
-            if (validRanking.isEmpty()) {
-                event.getChannel().sendMessage("아직 서버 내에 포인트 데이터가 없습니다!").queue();
+            if (rankingList.isEmpty()) {
+                event.getChannel().sendMessage("아직 포인트 데이터가 없습니다!").queue();
                 return;
             }
 
-            // 2. 서버에 있는 사람들끼리만 정렬
-            validRanking.sort((o1, o2) -> {
+            // 2. 전체 데이터를 잔고(포인트 - 빚) 기준으로 정렬
+            rankingList.sort((o1, o2) -> {
                 int b1 = o1.getValue() - userDebt.getOrDefault(o1.getKey(), 0);
                 int b2 = o2.getValue() - userDebt.getOrDefault(o2.getKey(), 0);
                 return Integer.compare(b2, b1);
             });
 
-            // 3. 정렬된 리스트에서 상위 10명만 출력
+            // 3. 상위 10명 출력
             StringBuilder sb = new StringBuilder();
-            sb.append("\uD83C\uDFC6 **[서버 내 실제 잔고 랭킹 (Top 10)]**\n\n");
+            sb.append("\uD83C\uDFC6 **[전체 잔고 랭킹 (Top 10)]**\n\n");
 
-            for (int i = 0; i < Math.min(validRanking.size(), 10); i++) {
-                java.util.Map.Entry<String, Integer> entry = validRanking.get(i);
+            for (int i = 0; i < Math.min(rankingList.size(), 10); i++) {
+                java.util.Map.Entry<String, Integer> entry = rankingList.get(i);
                 String targetId = entry.getKey();
                 int actualBalance = entry.getValue() - userDebt.getOrDefault(targetId, 0);
 
+                // 서버에서 멤버를 찾되, 없으면 ID를 이름으로 표시
                 net.dv8tion.jda.api.entities.Member targetMember = event.getGuild().getMemberById(targetId);
-                String name = (targetMember != null) ? targetMember.getEffectiveName() : "알 수 없음";
+                String name = (targetMember != null) ? targetMember.getEffectiveName() : ("ID: " + targetId);
 
                 sb.append(String.format("%d등: **%s** %d P\n", i + 1, name, actualBalance));
             }
@@ -922,7 +997,7 @@ public class MessageListener extends ListenerAdapter {
 
                 try {
                     // 3. 이제 안전하게 데이터를 싹 날리고 다시 저장합니다
-                    GoogleSheetService.clearValues("시트1!A2:E");
+                    GoogleSheetService.clearValues("시트1!A2:M");
 
                     // 데이터 전부 저장
                     DataManaGer.savePoints(userPoints, event.getGuild());
@@ -1134,5 +1209,41 @@ public class MessageListener extends ListenerAdapter {
             DataManaGer.savePoints(userPoints, event.getGuild());
         }
     }
+    private void finishRoulette(MessageChannel channel, net.dv8tion.jda.api.entities.Guild guild) { // MessageChannel로 간단히!
+        isRouletteOpen = false;
+
+        // 0~99까지 100개의 숫자로 확률 계산
+        int randomVal = new Random().nextInt(100);
+        String result;
+
+        if (randomVal < 50) result = "1";      // 0~49 (50%)
+        else if (randomVal < 75) result = "3"; // 50~74 (25%)
+        else if (randomVal < 90) result = "5"; // 75~89 (15%)
+        else if (randomVal < 97) result = "10"; // 90~96 (7%)
+        else result = "20";                    // 97~99 (3%)
+
+        StringBuilder sb = new StringBuilder("🎡 **[룰렛 결과 발표]** 🎡\n");
+        sb.append("당첨 번호: **").append(result).append("배 칸!!**\n\n");
+
+        for (String uid : currentBets.keySet()) {
+            String target = betTargets.get(uid);
+            int bet = currentBets.get(uid);
+
+            if (target.equals(result)) {
+                int win = bet * Integer.parseInt(result);
+                userPoints.put(uid, userPoints.getOrDefault(uid, 0) + win);
+                sb.append("<@").append(uid).append(">: ").append(win).append("P 획득! 🎉\n");
+            } else {
+                sb.append("<@").append(uid).append(">: 꽝... (").append(bet).append("P 증발)\n");
+            }
+        }
+
+        channel.sendMessage(sb.toString()).queue();
+
+        currentBets.clear();
+        betTargets.clear();
+        DataManaGer.savePoints(userPoints, guild);
+    }
 }
+
 
