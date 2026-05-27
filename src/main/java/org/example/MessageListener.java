@@ -1267,41 +1267,54 @@ public class MessageListener extends ListenerAdapter {
         if (action.equals("btn_confirm")) {
             String userId = event.getUser().getId();
 
-            // [중요] 보호권 데이터를 항상 최신으로 불러옵니다!
-            // 이렇게 하면 봇이 켜져 있는 동안 데이터가 꼬일 일이 없습니다.
+            // 데이터 최신화 (강화 직전에 무조건 불러오기)
             protectionTickets = DataManaGer.loadProtectionTickets();
 
             int currentLevel = pickaxeLevels.getOrDefault(userId, 1);
             int cost = (currentLevel * 20) + 100;
 
-            // ... (중략: 포인트 부족 체크 로직) ...
-
-            int successRate = 100 - (currentLevel * 15);
-            if (successRate < 5) successRate = 5;
-
-            // 이제 이 아래에서 마음껏 사용할 수 있습니다.
             if (userPoints.getOrDefault(userId, 0) < cost) {
                 event.editMessage("❌ **강화 실패!** (포인트가 부족합니다)").setComponents().queue();
                 return;
             }
 
+            // 포인트 차감
+            userPoints.put(userId, userPoints.get(userId) - cost);
+
+            int successRate = 100 - (currentLevel * 15);
+            if (successRate < 5) successRate = 5;
+
+            // 강화 성공/실패 판단
             if (random.nextInt(100) < successRate) {
-                // ... (강화 성공 로직) ...
+                // [강화 성공]
+                pickaxeLevels.put(userId, currentLevel + 1);
+                event.editMessage("✅ **강화 성공!** " + currentLevel + " → " + (currentLevel + 1) + "레벨!").setComponents().queue();
+
+                // ★ 성공 시 곡괭이 레벨 저장
+                DataManaGer.savePickaxeLevels(pickaxeLevels);
+
             } else {
-                // 강화 실패 시 보호권 처리
-                int tickets = protectionTickets.getOrDefault(userId, 0); // 이제 최신 데이터를 사용함
+                // [강화 실패]
+                int tickets = protectionTickets.getOrDefault(userId, 0);
 
                 if (tickets > 0) {
+                    // 보호권 사용
                     protectionTickets.put(userId, tickets - 1);
                     event.editMessage("🛡️ **강화 실패!** 보호권 사용됨! (남은 보호권: " + (tickets - 1) + "장)").setComponents().queue();
 
-                    // [중요] 변경된 보호권 데이터를 즉시 저장
+                    // ★ 보호권 감소 저장
                     DataManaGer.saveProtectionTickets(protectionTickets);
                 } else {
-                    // ... (강화 실패 - 곡괭이 등급 하락 로직) ...
+                    // 보호권 없을 시 레벨 하락
+                    int newLevel = Math.max(1, currentLevel - 1);
+                    pickaxeLevels.put(userId, newLevel);
+                    event.editMessage("💔 **강화 실패!** 곡괭이가 낡았습니다... (" + currentLevel + " → " + newLevel + " 레벨)").setComponents().queue();
+
+                    // ★ 레벨 하락 저장
                     DataManaGer.savePickaxeLevels(pickaxeLevels);
                 }
             }
+            // 최종 포인트 저장
             DataManaGer.savePoints(userPoints, event.getGuild());
         }
     }
