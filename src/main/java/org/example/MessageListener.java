@@ -18,6 +18,8 @@ public class MessageListener extends ListenerAdapter {
     private HashMap<String, Long> debtDeadline = new HashMap<>();
     private java.util.Random random = new java.util.Random();
     private HashMap<String, Long> workCooldowns = new HashMap<>();
+    private HashMap<String, Integer> pickaxeLevels = new HashMap<>(); // 유저별 곡괭이 레벨
+    private HashMap<String, Integer> protectionTickets = new HashMap<>(); // 유저별 보유한 강보권 수
 
     private HashMap<String, LocalDate> lastCheckInDates = new HashMap<>();
 
@@ -34,6 +36,14 @@ public class MessageListener extends ListenerAdapter {
 
         HashMap<String, Long> loadedDeadlines = DataManaGer.loadDeadlines();
         if (loadedDeadlines != null) this.debtDeadline = loadedDeadlines;
+
+        HashMap<String, Integer> loadedLevels = DataManaGer.loadPickaxeLevels();
+        if (loadedLevels != null) this.pickaxeLevels = loadedLevels;
+
+        // 보호권 불러오기
+        HashMap<String, Integer> loadedTickets = DataManaGer.loadProtectionTickets();
+        if (loadedTickets != null) this.protectionTickets = loadedTickets;
+
     }
 
     // 가격표 변수는 그대로 두셔도 됩니다.
@@ -291,11 +301,14 @@ public class MessageListener extends ListenerAdapter {
             event.getChannel().sendMessage("\uD83C\uDFAE [종겜방 봇 명령어 안내]\n" +
                     "💰 **포인트 & 도박**\n" +
                     "1. `!출첵` : 출석체크를 진행하여 포인트를 획득합니다.\n" +
-                    "1. `!채굴` : 채굴을 진행해 포인트를 획득합니다.\n" +
                     "1. `!포인트` : 내 보유 포인트를 확인합니다.\n" +
                     "1. `!랭킹` : 현재 보유 포인트 랭킹을 확인합니다.\n" +
                     "1. `!선물` : 포인트의 선물이 가능합니다.\n" +
                     "1. `!홀짝 [홀/짝] [금액]` : 포인트의 2배를 노리는 도박 게임!\n\n" +
+                    "⛏️ **채굴 & 강화**\n" +
+                    "6. `!채굴` : 광석을 캐서 포인트를 벌거나 강보권을 획득합니다.\n" +
+                    "7. `!강화` : 포인트를 소모해 곡괭이 레벨을 올립니다. (실패 시 레벨 하락)\n" +
+                    "8. `!내정보` : 곡괭이 레벨, 보유중인 강보권 을 확인합니다.\n\n" +
                     "💸 **대출 & 상환**\n" +
                     "6. `!대출 [금액]` : 최대 100 P까지 대출 (3일 이내 상환 필수!)\n" +
                     "7. `!상환` : 빌린 빚을 상환합니다.\n\n" +
@@ -342,6 +355,21 @@ public class MessageListener extends ListenerAdapter {
 
             String status = (myDebt > 0) ? " (빚: " + myDebt + " P)" : "";
             event.getChannel().sendMessage("💰 **[" + chatName + "]** 님의 현재 잔고: **" + myPoint + " P**" + status).queue();
+        }
+
+        if (message.equals("!내정보")) {
+            userId = event.getAuthor().getId();
+            int level = pickaxeLevels.getOrDefault(userId, 1);
+            int tickets = protectionTickets.getOrDefault(userId, 0);
+
+            String infoMsg = "👤 **" + event.getMember().getEffectiveName() + "님의 장비 정보**\n" +
+                    "-----------------------------\n" +
+                    "⛏️ 곡괭이 레벨: **" + level + " 레벨**\n" +
+                    "🛡️ 보유 강보권: **" + tickets + " 장**\n" +
+                    "-----------------------------\n" +
+                    "※ 잔액 확인은 `!포인트` 명령어를 사용하세요!";
+
+            event.getChannel().sendMessage(infoMsg).queue();
         }
 
 // 칭호상점 (그대로 두셔도 됩니다)
@@ -795,22 +823,35 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
+            int level = pickaxeLevels.getOrDefault(userId, 1); // 없으면 1레벨
+            int bonus = (level - 1) * 2; // 1레벨당 +5포인트 보너스 (밸런스 조절 가능)
             // [핵심] 랜덤 보상 시스템
             int chance = random.nextInt(100); // 0~99
             int earn = 0;
             String resultMsg = "";
 
-            if (chance < 5) { // 5% 확률: 대박
-                earn = 30;
-                resultMsg = "💎 **대박! 커다란 다이아몬드를 발견했습니다! (+30 P)**";
-            } else if (chance < 20) { // 15% 확률: 중박 (5%~19%)
-                earn = 10;
-                resultMsg = "⛏️ 꽤 괜찮은 광석을 캤습니다. (+10 P)";
-            } else if (chance < 70) { // 50% 확률: 쪽박 (20%~69%)
-                earn = 5;
-                resultMsg = "🪨 돌맹이만 잔뜩 캤네요... (+5 P)";
-            } else { // 30% 확률: 꽝 (70%~99%)
-                earn = 0;
+            int diamondChance = 5 + (level / 2); // 레벨당 다이아 확률 0.5%씩 증가
+
+            //강보권
+            boolean foundTicket = false;
+            if (random.nextInt(100) < 1) { // 1% 확률
+                int currentTickets = protectionTickets.getOrDefault(userId, 0);
+                protectionTickets.put(userId, currentTickets + 1);
+                foundTicket = true;
+                DataManaGer.saveProtectionTickets(protectionTickets); // 획득 즉시 저장
+            }
+
+            if (chance < diamondChance) {
+                earn = 50 + bonus;
+                resultMsg = "💎 **대박! 커다란 다이아몬드를 발견했습니다! (+" + earn + " P)**";
+            } else if (chance < 20) {
+                earn = 30 + bonus;
+                resultMsg = "⛏️ 꽤 괜찮은 광석을 캤습니다. (+" + earn + " P)";
+            } else if (chance < 70) {
+                earn = 10 + bonus;
+                resultMsg = "🪨 돌맹이만 잔뜩 캤네요... (+" + earn + " P)";
+            } else {
+                earn = 0; // 꽝은 보너스 없음
                 resultMsg = "❌ **앗! 곡괭이가 부러져서 아무것도 못 캤습니다... (0 P)**";
             }
 
@@ -820,7 +861,55 @@ public class MessageListener extends ListenerAdapter {
             workCooldowns.put(userId, now);
 
             DataManaGer.savePoints(userPoints, event.getGuild());
-            event.getChannel().sendMessage(resultMsg + "\n(현재 잔고: **" + (current + earn) + " P**)").queue();
+            String finalMsg = resultMsg + "\n(현재 잔고: **" + (current + earn) + " P**)";
+            if (foundTicket) {
+                finalMsg += "\n✨ **와우! 채굴 중에 '강화 보호권'을 발견했습니다! (+1 장)**";
+            }
+
+            event.getChannel().sendMessage(finalMsg).queue();
+        }
+
+        if (message.equals("!강화")) {
+            userId = event.getAuthor().getId();
+            int currentLevel = pickaxeLevels.getOrDefault(userId, 1);
+            int cost = currentLevel * 100; // 강화 비용
+
+            // [성공률 대폭 하향: 레벨당 15%씩 감소]
+            int successRate = 100 - (currentLevel * 15);
+            if (successRate < 5) successRate = 5; // 최소 5%는 보장
+
+            if (userPoints.getOrDefault(userId, 0) < cost) {
+                event.getChannel().sendMessage("❌ 포인트가 부족합니다!").queue();
+                return;
+            }
+
+            userPoints.put(userId, userPoints.get(userId) - cost);
+
+            if (random.nextInt(100) < successRate) {
+                // [성공]
+                pickaxeLevels.put(userId, currentLevel + 1);
+                event.getChannel().sendMessage("🔨 **강화 성공!** " + currentLevel + " → " + (currentLevel + 1) + "레벨!").queue();
+            } else {
+                // [실패 + 보호권 체크]
+                int tickets = protectionTickets.getOrDefault(userId, 0);
+
+                if (tickets > 0) {
+                    // 보호권 소모
+                    protectionTickets.put(userId, tickets - 1);
+                    event.getChannel().sendMessage("🛡️ **강화 실패!** 하지만 보호권이 사용되어 레벨이 유지됩니다! (남은 보호권: " + (tickets - 1) + "장)").queue();
+                } else {
+                    // 보호권 없으면 레벨 하락
+                    int newLevel = Math.max(1, currentLevel - 1);
+                    pickaxeLevels.put(userId, newLevel);
+                    event.getChannel().sendMessage("💔 **강화 실패!** 곡괭이가 낡았습니다... (" + currentLevel + " → " + newLevel + " 레벨)").queue();
+                }
+            }
+
+            DataManaGer.savePoints(userPoints, event.getGuild());
+            DataManaGer.savePickaxeLevels(pickaxeLevels);
+            DataManaGer.saveProtectionTickets(protectionTickets); // [이거 추가하세요!]
+        }
+
 
         //데이터복구
         if (message.equals("!데이터복구")) {
@@ -996,4 +1085,4 @@ public class MessageListener extends ListenerAdapter {
 
 
 
-}}}
+}}

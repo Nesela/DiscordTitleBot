@@ -153,5 +153,58 @@ public class DataManaGer {
         return map;
     }
 
+    public static HashMap<String, Integer> loadPickaxeLevels() {
+        HashMap<String, Integer> map = new HashMap<>();
+        try {
+            List<List<Object>> values = GoogleSheetService.getValues("시트1!J2:K100");
+            if (values != null) {
+                for (List<Object> row : values) {
+                    if (row.size() >= 2 && row.get(0) != null && row.get(1) != null) {
+                        map.put(row.get(0).toString(), Integer.parseInt(row.get(1).toString()));
+                    }
+                }
+            }
+        } catch (Exception e) { System.out.println("곡괭이 레벨 로드 에러: " + e.getMessage()); }
+        return map;
+    }
+
+    public static void savePickaxeLevels(HashMap<String, Integer> levels) {
+        if (levels == null || levels.isEmpty()) return;
+        List<List<Object>> values = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : levels.entrySet()) {
+            values.add(Arrays.asList(entry.getKey(), entry.getValue()));
+        }
+        try {
+            GoogleSheetService.updateValues("시트1!J2:K", values);
+        } catch (Exception e) { e.printStackTrace(); }
+    }
+
+    // --- 보호권 (L:ID, M:보유량) ---
+    public static HashMap<String, Integer> loadProtectionTickets() {
+        HashMap<String, Integer> map = new HashMap<>();
+        try {
+            List<List<Object>> values = GoogleSheetService.getValues("시트1!L2:M100");
+            if (values != null) {
+                for (List<Object> row : values) {
+                    if (row.size() >= 2 && row.get(0) != null && row.get(1) != null) {
+                        map.put(row.get(0).toString(), Integer.parseInt(row.get(1).toString()));
+                    }
+                }
+            }
+        } catch (Exception e) { System.out.println("보호권 로드 에러: " + e.getMessage()); }
+        return map;
+    }
+
+    public static void saveProtectionTickets(HashMap<String, Integer> tickets) {
+        if (tickets == null || tickets.isEmpty()) return;
+        List<List<Object>> values = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : tickets.entrySet()) {
+            values.add(Arrays.asList(entry.getKey(), entry.getValue()));
+        }
+        try {
+            GoogleSheetService.updateValues("시트1!L2:M", values);
+        } catch (Exception e) { e.printStackTrace(); }
+    }
+
 }
 
