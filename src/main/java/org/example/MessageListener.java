@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
+
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 
 
@@ -36,6 +37,7 @@ public class MessageListener extends ListenerAdapter {
     private boolean isRouletteOpen = false;
     private final Map<String, String> betTargets = new ConcurrentHashMap<>();
     private long rouletteEndTime = 0;
+    public static java.util.Map<String, Integer> userProtectTickets = new java.util.HashMap<>();
 
     private HashMap<String, LocalDate> lastCheckInDates = new HashMap<>();
     // 가격표 변수는 그대로 두셔도 됩니다.
@@ -733,16 +735,15 @@ public class MessageListener extends ListenerAdapter {
 
             for (int i = 0; i < Math.min(rankingList.size(), 10); i++) {
                 java.util.Map.Entry<String, Integer> entry = rankingList.get(i);
-                String targetId = entry.getKey();
+                String targetId = entry.getKey(); // 이게 랭킹에 있는 사람의 ID입니다!
                 int actualBalance = entry.getValue() - userDebt.getOrDefault(targetId, 0);
 
-                // 1. 서버 멤버 정보를 가져옵니다.
+                // [중요] targetId를 넣어야 그 사람 정보가 나옵니다!
                 net.dv8tion.jda.api.entities.Member m = event.getGuild().getMemberById(targetId);
 
-                // 2. [핵심] 서버에 있으면 닉네임, 없으면 '탈퇴한 유저'로 표시합니다.
-                String displayName = (member != null) ? member.getEffectiveName() : "탈퇴한 유저";
+                // 서버에 있으면 닉네임, 없으면 targetId 표시
+                String displayName = (m != null) ? m.getEffectiveName() : targetId;
 
-                // 3. 닉네임(혹은 탈퇴한 유저)을 출력합니다.
                 sb.append(String.format("%d등: **%s** %d P\n", i + 1, displayName, actualBalance));
             }
 
@@ -1218,39 +1219,46 @@ public class MessageListener extends ListenerAdapter {
         // 4. 확인 버튼 처리 (여기서 action.equals를 사용해야 합니다!)
         if (action.equals("btn_confirm")) {
             String userId = event.getUser().getId();
+
+            // [중요] 보호권 데이터를 항상 최신으로 불러옵니다!
+            // 이렇게 하면 봇이 켜져 있는 동안 데이터가 꼬일 일이 없습니다.
+            protectionTickets = DataManaGer.loadProtectionTickets();
+
             int currentLevel = pickaxeLevels.getOrDefault(userId, 1);
             int cost = (currentLevel * 20) + 100;
 
-            if (userPoints.getOrDefault(userId, 0) < cost) {
-                event.editMessage("❌ **강화 실패!** (포인트가 그새 부족해졌습니다)").setComponents().queue();
-                return;
-            }
+            // ... (중략: 포인트 부족 체크 로직) ...
 
-            // 실제 강화 로직
-            userPoints.put(userId, userPoints.get(userId) - cost);
             int successRate = 100 - (currentLevel * 15);
             if (successRate < 5) successRate = 5;
 
+            // 이제 이 아래에서 마음껏 사용할 수 있습니다.
+            if (userPoints.getOrDefault(userId, 0) < cost) {
+                event.editMessage("❌ **강화 실패!** (포인트가 부족합니다)").setComponents().queue();
+                return;
+            }
+
             if (random.nextInt(100) < successRate) {
-                pickaxeLevels.put(userId, currentLevel + 1);
-                event.editMessage("✅ **강화 성공!** " + currentLevel + " → " + (currentLevel + 1) + "레벨!").setComponents().queue();
-                DataManaGer.savePickaxeLevels(pickaxeLevels);
+                // ... (강화 성공 로직) ...
             } else {
-                int tickets = protectionTickets.getOrDefault(userId, 0);
+                // 강화 실패 시 보호권 처리
+                int tickets = protectionTickets.getOrDefault(userId, 0); // 이제 최신 데이터를 사용함
+
                 if (tickets > 0) {
                     protectionTickets.put(userId, tickets - 1);
                     event.editMessage("🛡️ **강화 실패!** 보호권 사용됨! (남은 보호권: " + (tickets - 1) + "장)").setComponents().queue();
+
+                    // [중요] 변경된 보호권 데이터를 즉시 저장
                     DataManaGer.saveProtectionTickets(protectionTickets);
                 } else {
-                    int newLevel = Math.max(1, currentLevel - 1);
-                    pickaxeLevels.put(userId, newLevel);
-                    event.editMessage("💔 **강화 실패!** 곡괭이가 낡았습니다... (" + currentLevel + " → " + newLevel + " 레벨)").setComponents().queue();
+                    // ... (강화 실패 - 곡괭이 등급 하락 로직) ...
                     DataManaGer.savePickaxeLevels(pickaxeLevels);
                 }
             }
             DataManaGer.savePoints(userPoints, event.getGuild());
         }
     }
+
     private void finishRoulette(net.dv8tion.jda.api.entities.channel.middleman.MessageChannel channel, net.dv8tion.jda.api.entities.Guild guild) {
         isRouletteOpen = false;
 

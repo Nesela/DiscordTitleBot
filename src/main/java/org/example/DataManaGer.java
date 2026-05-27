@@ -39,34 +39,37 @@ public class DataManaGer {
     }
 
     public static void savePoints(HashMap<String, Integer> points, net.dv8tion.jda.api.entities.Guild guild) {
-        System.out.println("[디버그] 봇이 인식 중인 전체 멤버 수: " + guild.getMembers().size());
-
         List<List<Object>> values = new ArrayList<>();
+
         for (Map.Entry<String, Integer> entry : points.entrySet()) {
             String userId = entry.getKey();
+            int point = entry.getValue();
+
+            // 1. 서버 멤버 찾기
             net.dv8tion.jda.api.entities.Member member = guild.getMemberById(userId);
 
-            String displayName = (member != null) ? member.getEffectiveName() : nicknameCache.getOrDefault(userId, "알수없음");
-
-            // "알수없음" 이거나 "불러오기실패"인 경우 저장을 건너뜁니다 (기존 데이터 유지)
-            if (displayName.equals("알수없음") || displayName.contains("이름불러오기")) {
-                continue;
+            String displayName;
+            if (member != null) {
+                // 서버에 있으면 닉네임 가져오고 캐시 업데이트
+                displayName = member.getEffectiveName();
+                nicknameCache.put(userId, displayName);
+            } else {
+                // 서버에 없으면 기존 캐시에서 찾고, 캐시에도 없으면 ID를 이름으로 씀
+                displayName = nicknameCache.getOrDefault(userId, userId);
             }
 
-            values.add(Arrays.asList(userId, displayName, entry.getValue()));
+            // [중요] 삭제 로직(continue)을 제거하여 어떤 경우든 무조건 데이터가 저장되게 함
+            values.add(Arrays.asList(userId, displayName, point));
         }
 
-        // [핵심] try-catch로 감싸야 빨간줄이 사라집니다!
         try {
             if (!values.isEmpty()) {
                 GoogleSheetService.updateValues("시트1!A2:C", values);
             }
         } catch (Exception e) {
-            System.err.println("구글 시트 저장 중 오류 발생: " + e.getMessage());
             e.printStackTrace();
         }
     }
-
     // 칭호 로드
     public static HashMap<String, String> loadTitles() {
         HashMap<String, String> map = new HashMap<>();
