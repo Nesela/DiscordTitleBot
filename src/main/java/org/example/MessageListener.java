@@ -165,7 +165,7 @@ public class MessageListener extends ListenerAdapter {
 
         if (message.equals("!강화")) {
             int currentLevel = pickaxeLevels.getOrDefault(userId, 1);
-            int cost = currentLevel * 20;
+            int cost = (currentLevel * 20) + 100;
             int successRate = 100 - (currentLevel * 15);
             if (successRate < 5) successRate = 5;
 
@@ -830,7 +830,7 @@ public class MessageListener extends ListenerAdapter {
         if (message.equals("!채굴")) {
             userId = event.getAuthor().getId();
             long now = System.currentTimeMillis();
-            long cooldown = 3 * 60 * 1000; // 1분
+            long cooldown = 3 * 60 * 1000; // 3분
 
             // 쿨타임 체크
             if (workCooldowns.containsKey(userId) && (now - workCooldowns.get(userId) < cooldown)) {
