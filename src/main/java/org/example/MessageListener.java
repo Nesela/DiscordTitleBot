@@ -174,15 +174,6 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
-            event.getChannel().sendMessage("🔨 **" + currentLevel + " → " + (currentLevel + 1) + "강화 시도!**\n" +
-                            "📈 성공 확률: **" + successRate + "%**\n" +
-                            "💰 소모 포인트: **" + cost + " P**\n" +
-                            "정말로 강화하시겠습니까?")
-                    .setComponents(ActionRow.of(
-                            Button.primary("btn_confirm", "강화하기"),
-                            Button.danger("btn_cancel", "취소")
-                    ))
-                    .queue();
         }
 
 
