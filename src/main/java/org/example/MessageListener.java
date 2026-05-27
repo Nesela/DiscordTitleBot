@@ -713,40 +713,41 @@ public class MessageListener extends ListenerAdapter {
         //랭킹포인트
         if (message.equals("!랭킹")) {
             DataManaGer.loadPoints();
-
-            // 1. 모든 유저 데이터를 리스트에 담기 (필터링 안 함)
-            java.util.List<java.util.Map.Entry<String, Integer>> rankingList = new java.util.ArrayList<>(userPoints.entrySet());
-
-            if (rankingList.isEmpty()) {
+            if (userPoints.isEmpty()) {
                 event.getChannel().sendMessage("아직 포인트 데이터가 없습니다!").queue();
                 return;
             }
 
-            // 2. 전체 데이터를 잔고(포인트 - 빚) 기준으로 정렬
-            rankingList.sort((o1, o2) -> {
+            java.util.List<java.util.Map.Entry<String, Integer>> ranking = new java.util.ArrayList<>(userPoints.entrySet());
+
+            ranking.sort((o1, o2) -> {
                 int b1 = o1.getValue() - userDebt.getOrDefault(o1.getKey(), 0);
                 int b2 = o2.getValue() - userDebt.getOrDefault(o2.getKey(), 0);
                 return Integer.compare(b2, b1);
             });
 
-            // 3. 상위 10명 출력
             StringBuilder sb = new StringBuilder();
-            sb.append("\uD83C\uDFC6 **[전체 잔고 랭킹 (Top 10)]**\n\n");
+            sb.append("\uD83C\uDFC6 **[종겜방 실제 잔고 랭킹 (Top 10)]**\n\n");
 
-            for (int i = 0; i < Math.min(rankingList.size(), 10); i++) {
-                java.util.Map.Entry<String, Integer> entry = rankingList.get(i);
-                String targetId = entry.getKey(); // 이게 랭킹에 있는 사람의 ID입니다!
+            for (int i = 0; i < Math.min(ranking.size(), 10); i++) {
+                java.util.Map.Entry<String, Integer> entry = ranking.get(i);
+                String targetId = entry.getKey();
+
                 int actualBalance = entry.getValue() - userDebt.getOrDefault(targetId, 0);
 
-                // [중요] targetId를 넣어야 그 사람 정보가 나옵니다!
-                net.dv8tion.jda.api.entities.Member m = event.getGuild().getMemberById(targetId);
+                // [수정] 변수명을 member -> targetMember로 바꾸면 이름 충돌이 해결됩니다!
+                net.dv8tion.jda.api.entities.Member targetMember = event.getGuild().getMemberById(targetId);
 
-                // 서버에 있으면 닉네임, 없으면 targetId 표시
-                String displayName = (m != null) ? m.getEffectiveName() : targetId;
+                String name = "알 수 없음";
 
-                sb.append(String.format("%d등: **%s** %d P\n", i + 1, displayName, actualBalance));
+                if (targetMember != null) {
+                    name = targetMember.getEffectiveName();
+                } else if (DataManaGer.nicknameCache.containsKey(targetId)) {
+                    name = DataManaGer.nicknameCache.get(targetId);
+                }
+
+                sb.append(String.format("%d등: **%s** %d P\n", i + 1, name, actualBalance));
             }
-
             event.getChannel().sendMessage(sb.toString()).queue();
             return;
         }
