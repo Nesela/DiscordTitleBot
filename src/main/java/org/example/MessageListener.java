@@ -317,6 +317,7 @@ public class MessageListener extends ListenerAdapter {
                     "4. `!선물 [대상] [금액]` : 포인트를 선물합니다.\n" +
                     "5. `!홀짝 [홀/짝] [금액]` : 포인트의 2배를 노리는 도박 게임!\n\n" +
                     "🎡 **룰렛 시스템**\n" +
+                    "6. `!룰렛열기` : 룰렛 게임을 시작합니다.\n" +
                     "6. `!참여 [금액] [배율]` : 룰렛 모집 중일 때 참여합니다. (1, 3, 5, 10, 20배)\n" +
                     "7. `!룰렛현황` : 남은 시간과 현재 참여 현황을 확인합니다.\n\n" +
                     "⛏️ **채굴 & 강화**\n" +
@@ -623,6 +624,42 @@ public class MessageListener extends ListenerAdapter {
             return;
         }
 
+        if (message.equals("!룰렛현황")) {
+            // 1. 룰렛이 안 열려있으면 알려줌
+            if (!isRouletteOpen) {
+                event.getChannel().sendMessage("❌ 현재 진행 중인 룰렛이 없습니다.").queue();
+                return;
+            }
+
+            // 2. 참여자가 아무도 없을 때
+            if (currentBets.isEmpty()) {
+                event.getChannel().sendMessage("🎡 **[현재 룰렛 참여 현황]**\n\n아직 참여자가 없습니다! 첫 번째로 참여해 보세요!").queue();
+                return;
+            }
+
+            // 3. 참여자 목록 출력
+            StringBuilder sb = new StringBuilder("🎡 **[현재 룰렛 참여 현황]** 🎡\n\n");
+            int totalPot = 0; // 총 상금(총 베팅액) 계산용
+
+            for (Map.Entry<String, Integer> entry : currentBets.entrySet()) {
+                String uid = entry.getKey();
+                int betAmount = entry.getValue();
+                String target = betTargets.get(uid); // 유저가 선택한 배율
+
+                // 멤버 이름 가져오기
+                net.dv8tion.jda.api.entities.Member participant = event.getGuild().getMemberById(uid);
+                String name = (participant != null) ? participant.getEffectiveName() : "알 수 없음";
+
+                sb.append("• **").append(name).append("**: ").append(betAmount).append(" P (").append(target).append("배 선택)\n");
+                totalPot += betAmount;
+            }
+
+            sb.append("\n💰 **현재 총 상금:** ").append(totalPot).append(" P");
+
+            event.getChannel().sendMessage(sb.toString()).queue();
+            return;
+        }
+
 // 도박 홀짝
         if (message.startsWith("!홀짝")) {
             userId = event.getAuthor().getId();
@@ -675,7 +712,7 @@ public class MessageListener extends ListenerAdapter {
         if (message.equals("!랭킹")) {
             DataManaGer.loadPoints();
 
-            // 1. 저장된 모든 데이터를 리스트로 변환
+            // 1. 모든 유저 데이터를 리스트에 담기 (필터링 안 함)
             java.util.List<java.util.Map.Entry<String, Integer>> rankingList = new java.util.ArrayList<>(userPoints.entrySet());
 
             if (rankingList.isEmpty()) {
@@ -699,9 +736,9 @@ public class MessageListener extends ListenerAdapter {
                 String targetId = entry.getKey();
                 int actualBalance = entry.getValue() - userDebt.getOrDefault(targetId, 0);
 
-                // 서버에서 멤버를 찾되, 없으면 ID를 이름으로 표시
+                // 서버 멤버 확인 (없으면 '알 수 없음'으로 표시)
                 net.dv8tion.jda.api.entities.Member targetMember = event.getGuild().getMemberById(targetId);
-                String name = (targetMember != null) ? targetMember.getEffectiveName() : ("ID: " + targetId);
+                String name = (targetMember != null) ? targetMember.getEffectiveName() : "알 수 없음";
 
                 sb.append(String.format("%d등: **%s** %d P\n", i + 1, name, actualBalance));
             }
@@ -1211,18 +1248,18 @@ public class MessageListener extends ListenerAdapter {
             DataManaGer.savePoints(userPoints, event.getGuild());
         }
     }
-    private void finishRoulette(MessageChannel channel, net.dv8tion.jda.api.entities.Guild guild) { // MessageChannel로 간단히!
+    private void finishRoulette(net.dv8tion.jda.api.entities.channel.middleman.MessageChannel channel, net.dv8tion.jda.api.entities.Guild guild) {
         isRouletteOpen = false;
 
         // 0~99까지 100개의 숫자로 확률 계산
         int randomVal = new Random().nextInt(100);
         String result;
 
-        if (randomVal < 50) result = "1";      // 0~49 (50%)
-        else if (randomVal < 75) result = "3"; // 50~74 (25%)
-        else if (randomVal < 90) result = "5"; // 75~89 (15%)
-        else if (randomVal < 97) result = "10"; // 90~96 (7%)
-        else result = "20";                    // 97~99 (3%)
+        if (randomVal < 50) result = "2";      // 50% 확률 (2배)
+        else if (randomVal < 75) result = "3"; // 25% 확률 (3배)
+        else if (randomVal < 90) result = "5"; // 15% 확률 (5배)
+        else if (randomVal < 97) result = "10"; // 7% 확률 (10배)
+        else result = "20";                    // 3% 확률 (20배)
 
         StringBuilder sb = new StringBuilder("🎡 **[룰렛 결과 발표]** 🎡\n");
         sb.append("당첨 번호: **").append(result).append("배 칸!!**\n\n");
@@ -1231,20 +1268,24 @@ public class MessageListener extends ListenerAdapter {
             String target = betTargets.get(uid);
             int bet = currentBets.get(uid);
 
+            // [핵심] 내가 건 숫자와 결과가 똑같으면 승리! (다르면 자동으로 패배 처리)
             if (target.equals(result)) {
                 int win = bet * Integer.parseInt(result);
                 userPoints.put(uid, userPoints.getOrDefault(uid, 0) + win);
-                sb.append("<@").append(uid).append(">: ").append(win).append("P 획득! 🎉\n");
+                sb.append(uid).append("님 승리! +").append(win).append("P\n");
             } else {
-                sb.append("<@").append(uid).append(">: 꽝... (").append(bet).append("P 증발)\n");
+                sb.append(uid).append("님 패배...!\n");
             }
         }
 
         channel.sendMessage(sb.toString()).queue();
 
+        // 데이터 저장
+        DataManaGer.savePoints(userPoints, guild);
+
+        // 베팅 정보 초기화
         currentBets.clear();
         betTargets.clear();
-        DataManaGer.savePoints(userPoints, guild);
     }
 }
 
