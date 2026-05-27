@@ -4,11 +4,16 @@ import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.events.guild.member.update.GuildMemberUpdateNicknameEvent;
+import net.dv8tion.jda.api.interactions.components.buttons.Button;
+import net.dv8tion.jda.api.interactions.components.ActionRow;
+import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
+
 
 import javax.xml.crypto.Data;
 import java.util.HashMap;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+
 
 public class MessageListener extends ListenerAdapter {
     // 1. 여기서 바로 로드하지 말고 변수만 선언하세요.
@@ -22,6 +27,9 @@ public class MessageListener extends ListenerAdapter {
     private HashMap<String, Integer> protectionTickets = new HashMap<>(); // 유저별 보유한 강보권 수
 
     private HashMap<String, LocalDate> lastCheckInDates = new HashMap<>();
+    // 가격표 변수는 그대로 두셔도 됩니다.
+    private int publicTitlePrice = 100;
+    private int customTitlePrice = 150;
 
     // 2. 생성자를 만들어 여기서 데이터를 로드합니다.
     public MessageListener() {
@@ -45,10 +53,6 @@ public class MessageListener extends ListenerAdapter {
         if (loadedTickets != null) this.protectionTickets = loadedTickets;
 
     }
-
-    // 가격표 변수는 그대로 두셔도 됩니다.
-    private int publicTitlePrice = 100;
-    private int customTitlePrice = 150;
 
     //유통기한 날짜생성
     private String getExpirationDate(int days) {
@@ -139,6 +143,8 @@ public class MessageListener extends ListenerAdapter {
     @Override
     public void onMessageReceived(MessageReceivedEvent event) {
         if (event.getAuthor().isBot()) return;
+        String message = event.getMessage().getContentRaw();
+        String userId = event.getAuthor().getId();
 
         // 1. 멤버 객체를 변수에 담아둡니다.
         net.dv8tion.jda.api.entities.Member member = event.getMember();
@@ -149,17 +155,36 @@ public class MessageListener extends ListenerAdapter {
         }
 
         // 3. 변수 선언 시 member가 null인지 체크(삼항 연산자)하여 봇이 죽지 않게 합니다.
-        String message = event.getMessage().getContentRaw();
-        String userId = event.getAuthor().getId();
+
 
         // member가 있으면 닉네임, 없으면 유저 이름(getName) 사용
         String currentNickname = (member != null) ? member.getEffectiveName() : event.getAuthor().getName();
         String pureName = currentNickname.replaceAll("\\[.*?\\]", "").trim();
 
-        // member가 있을 때만 권한을 체크하고, 없으면 자동으로 false
         boolean isAdmin = (member != null) && member.hasPermission(Permission.ADMINISTRATOR);
 
-        // ... 이제 아래부터 기존의 if (message.startsWith("!포인트지급 ")) ... 쭉 이어가시면 됩니다.
+        if (message.equals("!강화")) {
+            int currentLevel = pickaxeLevels.getOrDefault(userId, 1);
+            int cost = currentLevel * 100;
+            int successRate = 100 - (currentLevel * 15);
+            if (successRate < 5) successRate = 5;
+
+            if (userPoints.getOrDefault(userId, 0) < cost) {
+                event.getChannel().sendMessage("❌ 포인트가 부족합니다! (필요: " + cost + " P)").queue();
+                return;
+            }
+
+            event.getChannel().sendMessage("🔨 **" + currentLevel + " → " + (currentLevel + 1) + "강화 시도!**\n" +
+                            "📈 성공 확률: **" + successRate + "%**\n" +
+                            "💰 소모 포인트: **" + cost + " P**\n" +
+                            "정말로 강화하시겠습니까?")
+                    .setComponents(ActionRow.of(
+                            Button.primary("btn_confirm", "강화하기"),
+                            Button.danger("btn_cancel", "취소")
+                    ))
+                    .queue();
+        }
+
 
         if (message.startsWith("!포인트지급 ")) {
             boolean isStaff = event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR);
@@ -873,42 +898,26 @@ public class MessageListener extends ListenerAdapter {
             userId = event.getAuthor().getId();
             int currentLevel = pickaxeLevels.getOrDefault(userId, 1);
             int cost = currentLevel * 100; // 강화 비용
-
             // [성공률 대폭 하향: 레벨당 15%씩 감소]
             int successRate = 100 - (currentLevel * 15);
             if (successRate < 5) successRate = 5; // 최소 5%는 보장
 
-            int myPoints = userPoints.getOrDefault(userId, 0);
-            if (myPoints < cost) {
-                event.getChannel().sendMessage("❌ **포인트가 부족합니다!**\n현재 보유: " + myPoints + " P / **필요 포인트: " + cost + " P**").queue();
+            // 포인트 체크 (미리 검사)
+            if (userPoints.getOrDefault(userId, 0) < cost) {
+                event.getChannel().sendMessage("❌ 포인트가 부족합니다! (필요: " + cost + " P)").queue();
                 return;
             }
 
-            userPoints.put(userId, userPoints.get(userId) - cost);
-
-            if (random.nextInt(100) < successRate) {
-                // [성공]
-                pickaxeLevels.put(userId, currentLevel + 1);
-                event.getChannel().sendMessage("🔨 **강화 성공!** " + currentLevel + " → " + (currentLevel + 1) + "레벨!").queue();
-            } else {
-                // [실패 + 보호권 체크]
-                int tickets = protectionTickets.getOrDefault(userId, 0);
-
-                if (tickets > 0) {
-                    // 보호권 소모
-                    protectionTickets.put(userId, tickets - 1);
-                    event.getChannel().sendMessage("🛡️ **강화 실패!** 하지만 보호권이 사용되어 레벨이 유지됩니다! (남은 보호권: " + (tickets - 1) + "장)").queue();
-                } else {
-                    // 보호권 없으면 레벨 하락
-                    int newLevel = Math.max(1, currentLevel - 1);
-                    pickaxeLevels.put(userId, newLevel);
-                    event.getChannel().sendMessage("💔 **강화 실패!** 곡괭이가 낡았습니다... (" + currentLevel + " → " + newLevel + " 레벨)").queue();
-                }
-            }
-
-            DataManaGer.savePoints(userPoints, event.getGuild());
-            DataManaGer.savePickaxeLevels(pickaxeLevels);
-            DataManaGer.saveProtectionTickets(protectionTickets); // [이거 추가하세요!]
+            // 버튼을 포함한 메시지 전송
+            event.getChannel().sendMessage("🔨 **" + currentLevel + " → " + (currentLevel + 1) + "강화 시도!**\n" +
+                            "📈 성공 확률: **" + successRate + "%**\n" +
+                            "💰 소모 포인트: **" + cost + " P**\n" +
+                            "정말로 강화하시겠습니까?")
+                    .setComponents(ActionRow.of(
+                            Button.primary("btn_confirm:" + userId, "강화하기"),
+                            Button.danger("btn_cancel:" + userId, "취소")
+                    ))
+                    .queue();
         }
 
 
@@ -1082,8 +1091,65 @@ public class MessageListener extends ListenerAdapter {
 
             DataManaGer.saveTitles(userTitles);
             event.getChannel().sendMessage("✅ **" + targetQuery + "**님의 **[" + titleToRemove + "]** 칭호를 삭제했습니다.").queue();
+
         }
 
 
+    }
 
-}}
+    @Override
+    public void onButtonInteraction(ButtonInteractionEvent event) {
+        // 1. ID를 쪼개서 action("btn_confirm")과 ownerId를 가져옵니다.
+        String[] parts = event.getComponentId().split(":");
+        String action = parts[0];
+        String ownerId = parts[1];
+
+        // 2. 보안 로직: 버튼 주인인지 확인
+        if (!event.getUser().getId().equals(ownerId)) {
+            event.reply("❌ 본인의 강화창만 조작 가능합니다!").setEphemeral(true).queue();
+            return;
+        }
+
+        // 3. 취소 버튼 처리
+        if (action.equals("btn_cancel")) {
+            event.editMessage("❌ **강화가 취소되었습니다.**").setComponents().queue(); // 버튼 제거
+            return;
+        }
+
+        // 4. 확인 버튼 처리 (여기서 action.equals를 사용해야 합니다!)
+        if (action.equals("btn_confirm")) {
+            String userId = event.getUser().getId();
+            int currentLevel = pickaxeLevels.getOrDefault(userId, 1);
+            int cost = currentLevel * 100;
+
+            if (userPoints.getOrDefault(userId, 0) < cost) {
+                event.editMessage("❌ **강화 실패!** (포인트가 그새 부족해졌습니다)").setComponents().queue();
+                return;
+            }
+
+            // 실제 강화 로직
+            userPoints.put(userId, userPoints.get(userId) - cost);
+            int successRate = 100 - (currentLevel * 15);
+            if (successRate < 5) successRate = 5;
+
+            if (random.nextInt(100) < successRate) {
+                pickaxeLevels.put(userId, currentLevel + 1);
+                event.editMessage("✅ **강화 성공!** " + currentLevel + " → " + (currentLevel + 1) + "레벨!").setComponents().queue();
+            } else {
+                int tickets = protectionTickets.getOrDefault(userId, 0);
+                if (tickets > 0) {
+                    protectionTickets.put(userId, tickets - 1);
+                    event.editMessage("🛡️ **강화 실패!** 보호권 사용됨! (남은 보호권: " + (tickets - 1) + "장)").setComponents().queue();
+                    DataManaGer.saveProtectionTickets(protectionTickets);
+                } else {
+                    int newLevel = Math.max(1, currentLevel - 1);
+                    pickaxeLevels.put(userId, newLevel);
+                    event.editMessage("💔 **강화 실패!** 곡괭이가 낡았습니다... (" + currentLevel + " → " + newLevel + " 레벨)").setComponents().queue();
+                    DataManaGer.savePickaxeLevels(pickaxeLevels);
+                }
+            }
+            DataManaGer.savePoints(userPoints, event.getGuild());
+        }
+    }
+}
+
