@@ -564,7 +564,7 @@ public class MessageListener extends ListenerAdapter {
             String rules = "🎡 **[러스트 룰렛 오픈!]** 🎡\n" +
                     "참여 명령어: `!참여 [금액] [배수]`\n\n" +
                     "📊 **[배당 및 당첨 확률]**\n" +
-                    "• 1배 : 50%\n" +
+                    "• 2배 : 50%\n" +
                     "• 3배 : 25%\n" +
                     "• 5배 : 15%\n" +
                     "• 10배 : 7%\n" +
@@ -736,9 +736,11 @@ public class MessageListener extends ListenerAdapter {
                 String targetId = entry.getKey();
                 int actualBalance = entry.getValue() - userDebt.getOrDefault(targetId, 0);
 
-                // 서버 멤버 확인 (없으면 '알 수 없음'으로 표시)
+                // 서버 멤버 확인
                 net.dv8tion.jda.api.entities.Member targetMember = event.getGuild().getMemberById(targetId);
-                String name = (targetMember != null) ? targetMember.getEffectiveName() : "알 수 없음";
+
+                // 핵심: 멤버가 있으면 닉네임 출력, 없으면 ID를 출력 (더 이상 '알 수 없음'은 안 나옵니다)
+                String name = (targetMember != null) ? targetMember.getEffectiveName() : targetId;
 
                 sb.append(String.format("%d등: **%s** %d P\n", i + 1, name, actualBalance));
             }
