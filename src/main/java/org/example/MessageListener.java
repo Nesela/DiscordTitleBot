@@ -320,7 +320,7 @@ public class MessageListener extends ListenerAdapter {
                     "5. `!홀짝 [홀/짝] [금액]` : 포인트의 2배를 노리는 도박 게임!\n\n" +
                     "🎡 **룰렛 시스템**\n" +
                     "6. `!룰렛열기` : 룰렛 게임을 시작합니다.\n" +
-                    "6. `!참여 [금액] [배율]` : 룰렛 모집 중일 때 참여합니다. (1, 3, 5, 10, 20배)\n" +
+                    "6. `!참여 [금액] [배율]` : 룰렛 모집 중일 때 참여합니다. (2, 3, 5, 10, 20배)\n" +
                     "7. `!룰렛현황` : 남은 시간과 현재 참여 현황을 확인합니다.\n\n" +
                     "⛏️ **채굴 & 강화**\n" +
                     "8. `!채굴` : 광석을 캐서 포인트를 벌거나 강보권을 획득합니다.\n" +
@@ -590,16 +590,16 @@ public class MessageListener extends ListenerAdapter {
             // 2. 메시지 자르기 (가장 먼저 실행되어야 함!)
             String[] args = message.split(" ");
             if (args.length < 3) {
-                event.getChannel().sendMessage("사용법: !참여 [금액] [타겟(1, 3, 5, 10, 20)]").queue();
+                event.getChannel().sendMessage("사용법: !참여 [금액] [타겟(2, 3, 5, 10, 20)]").queue();
                 return;
             }
 
             // 3. 변수 정의 및 검증
             String target = args[2].trim();
-            List<String> validTargets = Arrays.asList("1", "3", "5", "10", "20");
+            List<String> validTargets = Arrays.asList("2", "3", "5", "10", "20");
 
             if (!validTargets.contains(target)) {
-                event.getChannel().sendMessage("❌ 1, 3, 5, 10, 20배 중에서 선택하세요!").queue();
+                event.getChannel().sendMessage("❌ 2, 3, 5, 10, 20배 중에서 선택하세요!").queue();
                 return;
             }
 
