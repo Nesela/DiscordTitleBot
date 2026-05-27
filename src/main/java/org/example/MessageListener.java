@@ -1098,7 +1098,7 @@ public class MessageListener extends ListenerAdapter {
         if (action.equals("btn_confirm")) {
             String userId = event.getUser().getId();
             int currentLevel = pickaxeLevels.getOrDefault(userId, 1);
-            int cost = currentLevel * 100;
+            int cost = (currentLevel * 20) + 100;
 
             if (userPoints.getOrDefault(userId, 0) < cost) {
                 event.editMessage("❌ **강화 실패!** (포인트가 그새 부족해졌습니다)").setComponents().queue();
