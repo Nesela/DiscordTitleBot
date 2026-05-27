@@ -163,19 +163,6 @@ public class MessageListener extends ListenerAdapter {
 
         boolean isAdmin = (member != null) && member.hasPermission(Permission.ADMINISTRATOR);
 
-        if (message.equals("!강화")) {
-            int currentLevel = pickaxeLevels.getOrDefault(userId, 1);
-            int cost = (currentLevel * 20) + 100;
-            int successRate = 100 - (currentLevel * 15);
-            if (successRate < 5) successRate = 5;
-
-            if (userPoints.getOrDefault(userId, 0) < cost) {
-                event.getChannel().sendMessage("❌ 포인트가 부족합니다! (필요: " + cost + " P)").queue();
-                return;
-            }
-
-        }
-
 
         if (message.startsWith("!포인트지급 ")) {
             boolean isStaff = event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR);
@@ -888,7 +875,7 @@ public class MessageListener extends ListenerAdapter {
         if (message.equals("!강화")) {
             userId = event.getAuthor().getId();
             int currentLevel = pickaxeLevels.getOrDefault(userId, 1);
-            int cost = currentLevel * 100; // 강화 비용
+            int cost = (currentLevel * 20) + 100; // 강화 비용
             // [성공률 대폭 하향: 레벨당 15%씩 감소]
             int successRate = 100 - (currentLevel * 15);
             if (successRate < 5) successRate = 5; // 최소 5%는 보장
