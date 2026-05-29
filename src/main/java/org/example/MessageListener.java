@@ -51,7 +51,6 @@ public class MessageListener extends ListenerAdapter {
         // 보호권 불러오기
         HashMap<String, Integer> loadedTickets = DataManaGer.loadProtectionTickets();
         if (loadedTickets != null) this.protectionTickets = loadedTickets;
-
     }
 
     //유통기한 날짜생성
