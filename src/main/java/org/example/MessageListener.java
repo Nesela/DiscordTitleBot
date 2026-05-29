@@ -15,7 +15,6 @@ import java.util.*;
 import java.util.concurrent.*;
 
 
-
 public class MessageListener extends ListenerAdapter {
     // 1. 여기서 바로 로드하지 말고 변수만 선언하세요.
     private HashMap<String, Integer> userPoints = new HashMap<>(); // 선언 시 바로 로드 금지!
