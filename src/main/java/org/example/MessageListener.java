@@ -836,11 +836,20 @@ public class MessageListener extends ListenerAdapter {
 
             //강보권
             boolean foundTicket = false;
-            if (random.nextInt(100) < 1) { // 1% 확률
+
+            int currentLevel = pickaxeLevels.getOrDefault(userId, 1);
+            double rawRate = 1.0 + (currentLevel * 0.5);
+
+            // 2. 맥스치(10%) 적용: 10보다 크면 무조건 10으로 고정
+            double ticketRate = Math.min(rawRate, 10.0);
+
+            // 3. 확률 체크
+            if (random.nextDouble() * 100 < ticketRate) {
                 int currentTickets = protectionTickets.getOrDefault(userId, 0);
                 protectionTickets.put(userId, currentTickets + 1);
-                foundTicket = true;
-                DataManaGer.saveProtectionTickets(protectionTickets); // 획득 즉시 저장
+                DataManaGer.saveProtectionTickets(protectionTickets);
+
+                event.getChannel().sendMessage("✨ **[" + pureName + "]님, 채굴하다가 보호권을 발견했습니다! (현재 확률: " + ticketRate + "%)**").queue();
             }
 
             if (chance < diamondChance) {
