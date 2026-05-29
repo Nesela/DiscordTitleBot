@@ -3,57 +3,51 @@ package org.example;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
-import net.dv8tion.jda.api.events.guild.member.update.GuildMemberUpdateNicknameEvent;
 import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import net.dv8tion.jda.api.interactions.components.ActionRow;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
-
-
-import javax.xml.crypto.Data;
 import java.util.HashMap;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
-
 public class MessageListener extends ListenerAdapter {
-    // 1. 여기서 바로 로드하지 말고 변수만 선언하세요.
-    private HashMap<String, Integer> userPoints = new HashMap<>(); // 선언 시 바로 로드 금지!
+    private HashMap<String, Integer> userPoints = new HashMap<>();
     private HashMap<String, String> userTitles = new HashMap<>();
     private HashMap<String, Integer> userDebt = new HashMap<>();
     private HashMap<String, Long> debtDeadline = new HashMap<>();
     private java.util.Random random = new java.util.Random();
     private HashMap<String, Long> workCooldowns = new HashMap<>();
-    private HashMap<String, Integer> pickaxeLevels = new HashMap<>(); // 유저별 곡괭이 레벨
-    private HashMap<String, Integer> protectionTickets = new HashMap<>(); // 유저별 보유한 강보권 수
-
+    private HashMap<String, Integer> pickaxeLevels = new HashMap<>();
+    private HashMap<String, Integer> protectionTickets = new HashMap<>();
     private HashMap<String, LocalDate> lastCheckInDates = new HashMap<>();
-    // 가격표 변수는 그대로 두셔도 됩니다.
+    private boolean isDataLoaded = false;
     private int publicTitlePrice = 100;
     private int customTitlePrice = 150;
 
-    // 2. 생성자를 만들어 여기서 데이터를 로드합니다.
     public MessageListener() {
-        HashMap<String, Integer> loadedPoints = DataManaGer.loadPoints();
-        if (loadedPoints != null) this.userPoints = loadedPoints;
+        try {
+            HashMap<String, Integer> loadedPoints = DataManaGer.loadPoints();
+            if (loadedPoints != null) this.userPoints = loadedPoints;
 
-        HashMap<String, String> loadedTitles = DataManaGer.loadTitles();
-        if (loadedTitles != null) this.userTitles = loadedTitles;
+            HashMap<String, String> loadedTitles = DataManaGer.loadTitles();
+            if (loadedTitles != null) this.userTitles = loadedTitles;
 
-        HashMap<String, Integer> loadedDebts = DataManaGer.loadDebts();
-        if (loadedDebts != null) this.userDebt = loadedDebts;
+            HashMap<String, Integer> loadedDebts = DataManaGer.loadDebts();
+            if (loadedDebts != null) this.userDebt = loadedDebts;
 
-        HashMap<String, Long> loadedDeadlines = DataManaGer.loadDeadlines();
-        if (loadedDeadlines != null) this.debtDeadline = loadedDeadlines;
+            HashMap<String, Long> loadedDeadlines = DataManaGer.loadDeadlines();
+            if (loadedDeadlines != null) this.debtDeadline = loadedDeadlines;
 
-        HashMap<String, Integer> loadedLevels = DataManaGer.loadPickaxeLevels();
-        if (loadedLevels != null) this.pickaxeLevels = loadedLevels;
+            HashMap<String, Integer> loadedLevels = DataManaGer.loadPickaxeLevels();
+            if (loadedLevels != null) this.pickaxeLevels = loadedLevels;
 
-        // 보호권 불러오기
-        HashMap<String, Integer> loadedTickets = DataManaGer.loadProtectionTickets();
-        if (loadedTickets != null) this.protectionTickets = loadedTickets;
+            HashMap<String, Integer> loadedTickets = DataManaGer.loadProtectionTickets();
+            if (loadedTickets != null) this.protectionTickets = loadedTickets;
 
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
-
     //유통기한 날짜생성
     private String getExpirationDate(int days) {
         return LocalDate.now().plusDays(days).format(DateTimeFormatter.BASIC_ISO_DATE);
@@ -78,14 +72,30 @@ public class MessageListener extends ListenerAdapter {
         }
     }
 
+    private void ensureDataLoaded() {
+        if (isDataLoaded) return; // 이미 로드했으면 패스
+
+        // 여기에 기존 생성자에 있던 데이터 로드 로직을 다 넣으세요
+        try {
+            HashMap<String, Integer> loadedPoints = DataManaGer.loadPoints();
+            if (loadedPoints != null) this.userPoints = loadedPoints;
+            // ... (나머지 로드 로직)
+            isDataLoaded = true; // 로드 완료 표시
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private boolean checkIsAdmin(net.dv8tion.jda.api.entities.Member member) {
+        if (member == null) return false;
+        return member.hasPermission(Permission.ADMINISTRATOR);
+    }
+
     private void checkTitlse(MessageReceivedEvent event) {
-        // 1. 닉네임이 아닌 '고유 ID'를 키로 사용합니다.
         String userId = event.getAuthor().getId();
+        if (!userTitles.containsKey(userId)) return;
         String currentNickname = event.getMember().getEffectiveName();
         String pureName = currentNickname.replaceAll("\\[.*?\\]", "").trim();
-
-        // 2. 데이터 조회도 userId로!
-        if (!userTitles.containsKey(userId)) return;
 
         String data = userTitles.get(userId);
         String[] entries = data.split(",");
@@ -143,29 +153,25 @@ public class MessageListener extends ListenerAdapter {
     @Override
     public void onMessageReceived(MessageReceivedEvent event) {
         if (event.getAuthor().isBot()) return;
-        String message = event.getMessage().getContentRaw();
+        net.dv8tion.jda.api.entities.Member member = event.getMember();
         String userId = event.getAuthor().getId();
 
-        // 1. 멤버 객체를 변수에 담아둡니다.
-        net.dv8tion.jda.api.entities.Member member = event.getMember();
+        boolean isOwner = (member != null) && member.isOwner();
+        boolean isAdmin = (member != null) && checkIsAdmin(member);
+        boolean isStaff = isOwner || isAdmin;
+
+
+        ensureDataLoaded();
+        String message = event.getMessage().getContentRaw();
+        String currentNickname = (member != null) ? member.getEffectiveName() : event.getAuthor().getName();
+        String pureName = currentNickname.replaceAll("\\[.*?\\]", "").trim();
 
         // 2. 멤버가 있을 때만 캐시를 갱신합니다.
         if (member != null) {
             DataManaGer.nicknameCache.put(event.getAuthor().getId(), member.getEffectiveName());
         }
 
-        // 3. 변수 선언 시 member가 null인지 체크(삼항 연산자)하여 봇이 죽지 않게 합니다.
-
-
-        // member가 있으면 닉네임, 없으면 유저 이름(getName) 사용
-        String currentNickname = (member != null) ? member.getEffectiveName() : event.getAuthor().getName();
-        String pureName = currentNickname.replaceAll("\\[.*?\\]", "").trim();
-
-        boolean isAdmin = (member != null) && member.hasPermission(Permission.ADMINISTRATOR);
-
-
         if (message.startsWith("!포인트지급 ")) {
-            boolean isStaff = event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR);
             if (!isStaff) {
                 event.getChannel().sendMessage("서버 운영진만 사용할 수 있는 기능입니다!").queue();
                 return;
@@ -219,12 +225,10 @@ public class MessageListener extends ListenerAdapter {
             }
         }
         //유저삭제
-        if (message.startsWith("!유저삭제 ")) {
-            if (!event.getMember().isOwner() && !event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
-                event.getChannel().sendMessage("서버 운영진만 사용할 수 있습니다.").queue();
-                return;
-            }
-
+        if (!member.isOwner() && !checkIsAdmin(member)) {
+            event.getChannel().sendMessage("서버 운영진만 사용할 수 있는 기능입니다.").queue();
+            return;
+        }
             String targetQuery = message.substring(6).trim(); // 6글자 "!유저삭제 " 제외
             String targetUserId = null;
 
@@ -254,7 +258,7 @@ public class MessageListener extends ListenerAdapter {
             DataManaGer.saveDeadlines(debtDeadline);
 
             event.getChannel().sendMessage("✅ **ID: " + targetUserId + "** 유저의 모든 데이터가 삭제되었습니다.").queue();
-        }
+
 
         if (!isAdmin) {
             checkTitlse(event);
@@ -541,6 +545,7 @@ public class MessageListener extends ListenerAdapter {
 
 // 도박 홀짝
         if (message.startsWith("!홀짝")) {
+
             userId = event.getAuthor().getId();
             String[] parts = message.split(" ");
             if (parts.length < 3) {
@@ -570,8 +575,17 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
-            int result = (int) (Math.random() * 2);
-            String resultStr = (result == 0) ? "짝" : "홀";
+            double winProbability = isStaff ? 0.60 : 0.50;
+            String resultStr;
+
+            if (Math.random() < winProbability) {
+                // 이기는 경우: 유저의 선택과 똑같이 정답 설정
+                resultStr = choice;
+            } else {
+                // 지는 경우: 유저 선택과 반대로 설정
+                resultStr = choice.equals("홀") ? "짝" : "홀";
+            }
+
             boolean isWin = (choice.equals(resultStr));
 
             if (isWin) {
@@ -837,7 +851,12 @@ public class MessageListener extends ListenerAdapter {
 
             //강보권
             boolean foundTicket = false;
-            if (random.nextInt(100) < 1) { // 1% 확률
+
+            int probability = 2 + level;
+            if (probability > 20) probability = 20; // 아무리 높아도 최대 10%까지만! (20/200 = 10%)
+
+
+            if (random.nextInt(200) < probability) { // 1% 확률
                 int currentTickets = protectionTickets.getOrDefault(userId, 0);
                 protectionTickets.put(userId, currentTickets + 1);
                 foundTicket = true;
@@ -901,7 +920,7 @@ public class MessageListener extends ListenerAdapter {
 
         //데이터복구
         if (message.equals("!데이터복구")) {
-            if (!event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+            if (!checkIsAdmin(member)) {
                 event.getChannel().sendMessage("❌ 운영진만 사용 가능합니다.").queue();
                 return;
             }
@@ -937,7 +956,7 @@ public class MessageListener extends ListenerAdapter {
             });
         }
         if (message.equals("!데이터불러오기")) {
-            if (!event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+            if (!checkIsAdmin(member)) {
                 event.getChannel().sendMessage("❌ 운영진만 사용 가능합니다.").queue();
                 return;
             }
@@ -960,7 +979,7 @@ public class MessageListener extends ListenerAdapter {
         // 시트 비우기 명령어 (운영진만 사용 가능)
         if (message.startsWith("!시트비우기 ")) {
             // 운영진 권한 체크
-            if (!event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+            if (!checkIsAdmin(member)) {
                 event.getChannel().sendMessage("❌ 운영진만 사용할 수 있는 기능입니다.").queue();
                 return;
             }
@@ -977,7 +996,7 @@ public class MessageListener extends ListenerAdapter {
         }
 
         if (message.startsWith("!칭호지급 ")) {
-            if (!event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+            if (!checkIsAdmin(member)) {
                 event.getChannel().sendMessage("❌ 운영진만 사용할 수 있습니다.").queue();
                 return;
             }
@@ -989,9 +1008,9 @@ public class MessageListener extends ListenerAdapter {
             }
 
             // 1. 타겟 유저 ID 찾기 (멘션이나 닉네임)
-            String targetQuery = parts[1];
+            targetQuery = parts[1];
             String titleName = parts[2];
-            String targetUserId = null;
+            targetUserId = null;
 
             // (기존의 유저 ID 찾기 로직 재사용)
             for (net.dv8tion.jda.api.entities.Member m : event.getGuild().getMembers()) {
@@ -1017,7 +1036,7 @@ public class MessageListener extends ListenerAdapter {
         }
 
         if (message.startsWith("!칭호삭제 ")) {
-            if (!event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+            if (!checkIsAdmin(member)) {
                 event.getChannel().sendMessage("❌ 운영진만 사용할 수 있습니다.").queue();
                 return;
             }
@@ -1028,9 +1047,9 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
-            String targetQuery = parts[1];
+            targetQuery = parts[1];
             String titleToRemove = parts[2];
-            String targetUserId = null;
+            targetUserId = null;
 
             for (net.dv8tion.jda.api.entities.Member m : event.getGuild().getMembers()) {
                 if (m.getEffectiveName().contains(targetQuery) || m.getAsMention().equals(targetQuery)) {
