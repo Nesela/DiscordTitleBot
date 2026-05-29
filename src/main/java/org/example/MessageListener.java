@@ -567,10 +567,15 @@ public class MessageListener extends ListenerAdapter {
                 event.getChannel().sendMessage(" 사용법: `!홀짝 [홀/짝] [금액]`").queue();
                 return;
             }
+            String choice = parts[1];
+
+            if (!choice.equals("홀") && !choice.equals("짝")) {
+                event.getChannel().sendMessage("❌ **'홀' 또는 '짝' 중에서만 선택해주세요!**").queue();
+                return;
+            }
 
             boolean isStaff = (event.getMember() != null) && (event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR));
 
-            String choice = parts[1];
             int bet = 0;
             try {
                 bet = Integer.parseInt(parts[2]);
