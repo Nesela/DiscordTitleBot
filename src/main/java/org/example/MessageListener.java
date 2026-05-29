@@ -1189,6 +1189,7 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
+
             // 3. 칭호 삭제 로직
             String currentData = userTitles.get(targetUserId);
             String[] entries = currentData.split(",");
@@ -1216,9 +1217,64 @@ public class MessageListener extends ListenerAdapter {
             event.getChannel().sendMessage("✅ **" + targetQuery + "**님의 **[" + titleToRemove + "]** 칭호를 삭제했습니다.").queue();
 
         }
+        if (message.startsWith("!지급 ")) {
+            if (!event.getMember().isOwner() && !event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+                event.getChannel().sendMessage("서버 운영진만 사용할 수 있습니다.").queue();
+                return;
+            }
+            String[] parts = message.split(" ");
+            String targetId = null;
 
+            if (!event.getMessage().getMentions().getMembers().isEmpty()) {
+                targetId = event.getMessage().getMentions().getMembers().get(0).getId();
+            }
+            // 2. 멘션이 없으면 닉네임이나 ID로 유저 검색
+            else {
+                String query = parts[1];
+                for (net.dv8tion.jda.api.entities.Member m : event.getGuild().getMembers()) {
+                    // 닉네임이 일치하거나, ID가 일치하면 선택
+                    if (m.getEffectiveName().contains(query) || m.getId().equals(query)) {
+                        targetId = m.getId();
+                        break;
+                    }
+                }
+            }
+
+            if (targetId == null) {
+                event.getChannel().sendMessage("❌ 유저를 찾을 수 없습니다.").queue();
+                return;
+            }
+
+            String type = parts[2];
+            int amount;
+
+            try {
+                amount = Integer.parseInt(parts[3]);
+            } catch (NumberFormatException e) {
+                event.getChannel().sendMessage("수량은 숫자로 입력해주세요!").queue();
+                return;
+            }
+
+            if (targetId == null) {
+                event.getChannel().sendMessage("❌ 유저를 찾을 수 없습니다.").queue();
+                return;
+            }
+
+            if (type.equals("곡괭이")) {
+                pickaxeLevels.put(targetId, amount);
+                // DataManaGer.savePickaxeLevels(pickaxeLevels); // 필요시 저장 추가
+                event.getChannel().sendMessage("✅ **ID: " + targetId + "** 유저에게 곡괭이 레벨 **" + amount + "**을(를) 지급했습니다.").queue();
+            } else if (type.equals("보호권")) {
+                protectionTickets.put(targetId, amount);
+                DataManaGer.saveProtectionTickets(protectionTickets);
+                event.getChannel().sendMessage("✅ **ID: " + targetId + "** 유저에게 강화 보호권 **" + amount + "개**를 지급했습니다.").queue();
+            } else {
+                event.getChannel().sendMessage("❌ 종류는 '곡괭이' 또는 '보호권' 중에서 선택하세요.").queue();
+            }
+        }
 
     }
+
 
     @Override
     public void onButtonInteraction(ButtonInteractionEvent event) {
