@@ -169,6 +169,8 @@ public class MessageListener extends ListenerAdapter {
         String pureName = currentNickname.replaceAll("\\[.*?\\]", "").trim();
 
         boolean isAdmin = (member != null) && member.hasPermission(Permission.ADMINISTRATOR);
+        boolean isOwner = (member != null) && member.isOwner();
+
 
 
         if (message.startsWith("!포인트지급 ")) {
@@ -550,13 +552,15 @@ public class MessageListener extends ListenerAdapter {
         }
 
 // 도박 홀짝
-        if (message.startsWith("!홀짝")) {
+        if (message.startsWith("!홀짝 ")) {
             userId = event.getAuthor().getId();
             String[] parts = message.split(" ");
             if (parts.length < 3) {
                 event.getChannel().sendMessage(" 사용법: `!홀짝 [홀/짝] [금액]`").queue();
                 return;
             }
+
+            boolean isStaff = (event.getMember() != null) && (event.getMember().isOwner() || event.getMember().hasPermission(Permission.ADMINISTRATOR));
 
             String choice = parts[1];
             int bet = 0;
@@ -580,9 +584,11 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
-            int result = (int) (Math.random() * 2);
-            String resultStr = (result == 0) ? "짝" : "홀";
-            boolean isWin = (choice.equals(resultStr));
+            double winProbability = isStaff ? 0.60 : 0.50;
+            boolean isWin = (Math.random() < winProbability);
+
+            // 3. 결과 결정
+            String resultStr = isWin ? choice : (choice.equals("홀") ? "짝" : "홀");
 
             if (isWin) {
                 userPoints.put(userId, myPoint + bet);
