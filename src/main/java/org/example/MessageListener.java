@@ -233,20 +233,29 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
-            String targetQuery = message.substring(6).trim(); // 6글자 "!유저삭제 " 제외
+            String targetQuery = message.substring(6).trim();
             String targetUserId = null;
 
-            // 닉네임 검색만 수행
-            for (net.dv8tion.jda.api.entities.Member m : event.getGuild().getMembers()) {
-                // 안쪽에서 쓰는 변수도 똑같이 'm'으로 바꿔줘야 합니다
-                if (m.getEffectiveName().contains(targetQuery)) {
-                    targetUserId = m.getId();
-                    break;
+            // 1. 멘션으로 삭제 확인 (@누구)
+            if (!event.getMessage().getMentions().getMembers().isEmpty()) {
+                targetUserId = event.getMessage().getMentions().getMembers().get(0).getId();
+            }
+            // 2. 고유 ID로 삭제 확인 (숫자만 입력된 경우)
+            else if (targetQuery.matches("\\d+")) {
+                targetUserId = targetQuery;
+            }
+            // 3. 닉네임으로 검색 (기존 방식)
+            else {
+                for (net.dv8tion.jda.api.entities.Member m : event.getGuild().getMembers()) {
+                    if (m.getEffectiveName().contains(targetQuery)) {
+                        targetUserId = m.getId();
+                        break;
+                    }
                 }
             }
 
             if (targetUserId == null) {
-                event.getChannel().sendMessage("❌ 해당 유저를 찾을 수 없습니다.").queue();
+                event.getChannel().sendMessage("❌ 해당 유저를 찾을 수 없습니다. (멘션, ID, 혹은 닉네임을 확인해주세요)").queue();
                 return;
             }
 
