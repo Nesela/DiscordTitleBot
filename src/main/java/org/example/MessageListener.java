@@ -597,7 +597,7 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
-            double winProbability = isStaff ? 0.65 : 0.50;
+            double winProbability = isStaff ? 0.55 : 0.50;
             boolean isWin = (Math.random() < winProbability);
 
             // 3. 결과 결정
