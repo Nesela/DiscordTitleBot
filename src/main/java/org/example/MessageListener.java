@@ -525,6 +525,14 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
+            String newTitle = parts[2];
+
+            // [추가] 4글자 초과 시 막기
+            if (newTitle.length() > 4) {
+                event.getChannel().sendMessage("❌ 칭호는 최대 4글자까지만 가능합니다!").queue();
+                return;
+            }
+
             // 1. 아이템 보유 확인
             int items = userItems.getOrDefault(userId, 0);
             if (items <= 0) {
@@ -551,7 +559,7 @@ public class MessageListener extends ListenerAdapter {
             }
 
             // 3. 칭호 강제 변경
-            String newTitle = parts[2];
+            newTitle = parts[2];
             userTitles.put(targetId, newTitle);
             DataManaGer.saveTitles(userTitles);
 
