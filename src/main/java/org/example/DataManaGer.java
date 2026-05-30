@@ -209,5 +209,31 @@ public class DataManaGer {
         } catch (Exception e) { e.printStackTrace(); }
     }
 
+    public static HashMap<String, Integer> loadItems() { // 이름 통일
+        HashMap<String, Integer> map = new HashMap<>();
+        try {
+            List<List<Object>> values = GoogleSheetService.getValues("시트1!N2:O100");
+            if (values != null) {
+                for (List<Object> row : values) {
+                    if (row.size() >= 2 && row.get(0) != null && row.get(1) != null) {
+                        map.put(row.get(0).toString(), Integer.parseInt(row.get(1).toString()));
+                    }
+                }
+            }
+        } catch (Exception e) { System.out.println("개명권 로드 에러: " + e.getMessage()); }
+        return map;
+    }
+
+    public static void saveItems(HashMap<String, Integer> items) { // Guild guild 제거
+        if (items == null) return;
+        List<List<Object>> values = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : items.entrySet()) {
+            values.add(Arrays.asList(entry.getKey(), entry.getValue()));
+        }
+        try {
+            GoogleSheetService.updateValues("시트1!N2:O", values); // 시트 주소는 그대로
+        } catch (Exception e) { e.printStackTrace(); }
+    }
+
 }
 

@@ -514,7 +514,8 @@ public class MessageListener extends ListenerAdapter {
             userItems.put(userId, userItems.getOrDefault(userId, 0) + 1);
 
             DataManaGer.savePoints(userPoints, event.getGuild());
-            event.getChannel().sendMessage("✅ **'강제부여권'**을 구매했습니다! 이제 `!강제부여 @유저 [칭호내용]`으로 누군가의 칭호를 바꿔보세요!").queue();
+            DataManaGer.saveItems(userItems); // 인자 1개로 수정 완료
+            event.getChannel().sendMessage("✅ **'강제부여권'**을 구매했습니다!").queue();
         }
 
         //강제 닉변
@@ -558,6 +559,7 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
+
             // 3. 칭호 강제 변경
             newTitle = parts[2];
             userTitles.put(targetId, newTitle);
@@ -573,11 +575,10 @@ public class MessageListener extends ListenerAdapter {
             // 5. 닉네임 실제 변경
             net.dv8tion.jda.api.entities.Member targetMember = event.getGuild().getMemberById(targetId);
             if (targetMember != null && !targetMember.isOwner()) {
-                pureName = targetMember.getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
+                pureName = targetMember.getEffectiveName().replaceAll("\\[.*?\\]", "").trim(); // String 선언 추가!
                 targetMember.modifyNickname("[" + newTitle + "] " + pureName).queue();
             }
-
-            event.getChannel().sendMessage("✅ **" + targetMember.getEffectiveName() + "**님의 칭호가 **[" + newTitle + "]**(으)로 강제 변경되었습니다!").queue();
+            event.getChannel().sendMessage("✅ **" + targetMember.getEffectiveName() + "**님의 칭호가 강제 변경되었습니다!").queue();
         }
 
 // 칭호교환
