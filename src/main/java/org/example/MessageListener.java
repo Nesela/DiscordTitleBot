@@ -31,6 +31,7 @@ public class MessageListener extends ListenerAdapter {
     private final Map<String, String> betTargets = new ConcurrentHashMap<>();
     private long rouletteEndTime = 0;
     public static java.util.Map<String, Integer> userProtectTickets = new java.util.HashMap<>();
+    private HashMap<String, Integer> userItems = new HashMap<>(); // 보유 아이템 개수 저장
 
     private HashMap<String, LocalDate> lastCheckInDates = new HashMap<>();// 유저별 보유한 강보권 수
 
@@ -491,6 +492,79 @@ public class MessageListener extends ListenerAdapter {
             }
 
             event.getChannel().sendMessage("✅ **" + pureName + "**님의 장인 정신이 깃든 **[" + customTitle + "]** 칭호가 완성되었습니다!").queue();
+        }
+
+
+        if (message.startsWith("!강제부여구매")) {
+            int price = 1000; // 가격 10,000 P
+            int myPoints = userPoints.getOrDefault(userId, 0);
+
+            if (myPoints < price) {
+                event.getChannel().sendMessage("❌ 포인트가 부족합니다! (필요: 1,000 P)").queue();
+                return;
+            }
+
+            // 포인트 차감 및 아이템 지급
+            userPoints.put(userId, myPoints - price);
+            userItems.put(userId, userItems.getOrDefault(userId, 0) + 1);
+
+            DataManaGer.savePoints(userPoints, event.getGuild());
+            event.getChannel().sendMessage("✅ **'강제부여권'**을 구매했습니다! 이제 `!강제부여 @유저 [칭호내용]`으로 누군가의 칭호를 바꿔보세요!").queue();
+        }
+
+        //강제 닉변
+        if (message.startsWith("!강제부여 ")) {
+            String[] parts = message.split(" ", 3);
+            if (parts.length < 3) {
+                event.getChannel().sendMessage("사용법: `!강제부여 [@유저/ID] [칭호내용]`").queue();
+                return;
+            }
+
+            // 1. 아이템 보유 확인
+            int items = userItems.getOrDefault(userId, 0);
+            if (items <= 0) {
+                event.getChannel().sendMessage("❌ 보유한 '강제 칭호권'이 없습니다. 상점에서 구매하세요!").queue();
+                return;
+            }
+
+            // 2. 타겟 유저 찾기
+            String targetId = null;
+            if (!event.getMessage().getMentions().getMembers().isEmpty()) {
+                targetId = event.getMessage().getMentions().getMembers().get(0).getId();
+            } else {
+                for (net.dv8tion.jda.api.entities.Member m : event.getGuild().getMembers()) {
+                    if (m.getId().equals(parts[1]) || m.getEffectiveName().contains(parts[1])) {
+                        targetId = m.getId();
+                        break;
+                    }
+                }
+            }
+
+            if (targetId == null) {
+                event.getChannel().sendMessage("❌ 유저를 찾을 수 없습니다.").queue();
+                return;
+            }
+
+            // 3. 칭호 강제 변경
+            String newTitle = parts[2];
+            userTitles.put(targetId, newTitle);
+            DataManaGer.saveTitles(userTitles);
+
+            long expireTime = System.currentTimeMillis() + (24 * 60 * 60 * 1000); // 딱 24시간 뒤
+            userTitles.put(targetId, newTitle + "|" + expireTime); // 칭호와 만료시간을 |로 구분해서 저장
+            DataManaGer.saveTitles(userTitles);
+
+            // 4. 아이템 소모
+            userItems.put(userId, items - 1);
+
+            // 5. 닉네임 실제 변경
+            net.dv8tion.jda.api.entities.Member targetMember = event.getGuild().getMemberById(targetId);
+            if (targetMember != null && !targetMember.isOwner()) {
+                pureName = targetMember.getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
+                targetMember.modifyNickname("[" + newTitle + "] " + pureName).queue();
+            }
+
+            event.getChannel().sendMessage("✅ **" + targetMember.getEffectiveName() + "**님의 칭호가 **[" + newTitle + "]**(으)로 강제 변경되었습니다!").queue();
         }
 
 // 칭호교환
@@ -1279,6 +1353,7 @@ public class MessageListener extends ListenerAdapter {
         }
 
     }
+
 
 
     @Override
