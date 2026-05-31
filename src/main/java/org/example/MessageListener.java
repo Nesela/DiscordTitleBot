@@ -592,7 +592,8 @@ public class MessageListener extends ListenerAdapter {
 
         // 하단 만료 체크 로직 (이렇게 바꾸셔야 합니다)
         String titleData = userTitles.get(userId);
-        if (titleData != null && titleData.contains(",")) { // 콤마가 있다면 여러 개임
+// [수정] 콤마가 있거나, 파이프(|)가 있으면(칭호가 1개 이상 존재하면) 모두 체크
+        if (titleData != null && (titleData.contains(",") || titleData.contains("|"))) {
             String[] entries = titleData.split(",");
             List<String> validEntries = new ArrayList<>();
             boolean isChanged = false;
@@ -603,18 +604,28 @@ public class MessageListener extends ListenerAdapter {
 
                 long expire = Long.parseLong(details[1]);
                 if (System.currentTimeMillis() < expire) {
-                    validEntries.add(entry); // 유효한 칭호만 리스트에 담음
+                    validEntries.add(entry);
                 } else {
-                    isChanged = true; // 만료된 게 하나라도 있음
+                    isChanged = true;
                 }
             }
 
             if (isChanged) {
-                if (validEntries.isEmpty()) userTitles.remove(userId);
-                else userTitles.put(userId, String.join(",", validEntries));
+                if (validEntries.isEmpty()) {
+                    userTitles.remove(userId);
+                } else {
+                    userTitles.put(userId, String.join(",", validEntries));
+                }
 
                 DataManaGer.saveTitles(userTitles);
-                // 닉네임 원상복구 로직...
+
+                // [중요] 닉네임 원상복구 로직을 여기에 넣어주세요!
+                net.dv8tion.jda.api.entities.Member m = event.getMember();
+                if (member != null && !member.isOwner()) {
+                    pureName = member.getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
+                    member.modifyNickname(pureName).queue();
+                    event.getChannel().sendMessage("⏳ 칭호 기간이 만료되어 원래 닉네임으로 돌아갑니다.").queue();
+                }
             }
         }
 
