@@ -584,15 +584,21 @@ public class MessageListener extends ListenerAdapter {
             List<String> validEntries = new ArrayList<>();
             boolean isChanged = false;
 
+            // 오늘 날짜를 yyyyMMdd 형식으로 가져옵니다 (예: 20260531)
+            String today = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+
             for (String entry : entries) {
                 String[] details = entry.split("\\|");
                 if (details.length < 2) continue;
 
-                long expire = Long.parseLong(details[1]);
-                if (System.currentTimeMillis() < expire) {
+                String expireDate = details[1]; // 저장된 만료일 (예: 20260614)
+
+                // 오늘 날짜와 만료일을 문자열로 비교합니다
+                // compareTo 결과가 >= 0 이면 오늘보다 미래이거나 오늘임 (유효)
+                if (expireDate.compareTo(today) >= 0) {
                     validEntries.add(entry);
                 } else {
-                    isChanged = true;
+                    isChanged = true; // 만료일이 지났으므로 삭제 대상
                 }
             }
 
@@ -605,7 +611,7 @@ public class MessageListener extends ListenerAdapter {
 
                 DataManaGer.saveTitles(userTitles);
 
-                // [중요] 닉네임 원상복구 로직을 여기에 넣어주세요!
+                // 닉네임 원상복구 로직
                 net.dv8tion.jda.api.entities.Member m = event.getMember();
                 if (member != null && !member.isOwner()) {
                     pureName = member.getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
