@@ -69,24 +69,13 @@ public class MessageListener extends ListenerAdapter {
     //만료 여부 확인
     public boolean isExpiresd(String dateString) {
         if (dateString == null || dateString.isEmpty()) return false;
-
         try {
-            // 1. 숫자만 추출
-            String cleanData = dateString.replaceAll("[^0-9]", "");
-
-            // 2. 만약 10자리 이상의 긴 숫자(밀리초)라면 시간 기반 처리
-            if (cleanData.length() > 10) {
-                long expireTime = Long.parseLong(cleanData);
-                return System.currentTimeMillis() > expireTime;
-            }
-            // 3. 기존 날짜(yyyyMMdd) 기반 처리
-            else {
-                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd");
-                java.time.LocalDate expiryDate = java.time.LocalDate.parse(cleanData, formatter);
-                return java.time.LocalDate.now().isAfter(expiryDate);
-            }
+            // 무조건 yyyyMMdd 형식으로만 처리합니다.
+            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.BASIC_ISO_DATE;
+            java.time.LocalDate expiryDate = java.time.LocalDate.parse(dateString, formatter);
+            return java.time.LocalDate.now().isAfter(expiryDate);
         } catch (Exception e) {
-            return false;
+            return false; // 형식이 잘못되었으면 만료 안 된 것으로 간주
         }
     }
 
@@ -571,8 +560,9 @@ public class MessageListener extends ListenerAdapter {
             String existingTitles = userTitles.get(targetId);
 
             newTitle = parts[2];
-            long expireTime = System.currentTimeMillis() + (24 * 60 * 60 * 1000); // 24시간 뒤
-            String newEntry = newTitle + "|" + expireTime;
+            String newEntry = newTitle + "|" + getExpirationDate(1);
+            existingTitles = userTitles.getOrDefault(targetId, "");
+            userTitles.put(targetId, existingTitles.isEmpty() ? newEntry : existingTitles + "," + newEntry);// 1일 뒤 만료(yyyyMMdd)로 저장
 
             if (existingTitles != null && !existingTitles.isEmpty()) {
                 // 기존 칭호가 있다면 콤마로 연결
@@ -663,7 +653,9 @@ public class MessageListener extends ListenerAdapter {
             userTitles.put(userId, finalData);
             DataManaGer.saveTitles(userTitles);
 
-            String cleanName = event.getMember().getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
+            String cleanName = (event.getMember() != null)
+                    ? event.getMember().getEffectiveName().replaceAll("\\[.*?\\]", "").trim()
+                    : "알수없음";
             if (!event.getMember().isOwner()) {
                 event.getMember().modifyNickname("[" + newTitle + "] " + cleanName).queue();
             }
@@ -993,12 +985,15 @@ public class MessageListener extends ListenerAdapter {
 
                 userPoints.put(userId, currentPoints + amount);
                 userDebt.put(userId, currentDebt + amount);
-                debtDeadline.put(userId, System.currentTimeMillis() + (3L * 24 * 60 * 60 * 1000));
+                String debtEntry = "빚쟁이|" + getExpirationDate(3); // 3일 뒤 만료(yyyyMMdd)로 저장
+
+                String currentData = userTitles.getOrDefault(userId, "");
+                userTitles.put(userId, currentData.isEmpty() ? debtEntry : currentData + "," + debtEntry);
 
                 // [수정] 칭호 추가 로직을 여기서 실행 (중복 안 되게!)
-                String currentData = userTitles.getOrDefault(userId, "");
+              currentData = userTitles.getOrDefault(userId, "");
                 if (!currentData.contains("빚쟁이")) {
-                    String debtEntry = "빚쟁이|" + getExpirationDate(3);
+                    debtEntry = "빚쟁이|" + getExpirationDate(3);
                     userTitles.put(userId, currentData.isEmpty() ? debtEntry : currentData + "," + debtEntry);
                 }
 
