@@ -562,11 +562,20 @@ public class MessageListener extends ListenerAdapter {
 
             // 3. 칭호 강제 변경
             newTitle = parts[2];
-            userTitles.put(targetId, newTitle);
-            DataManaGer.saveTitles(userTitles);
 
-            long expireTime = System.currentTimeMillis() + (24 * 60 * 60 * 1000); // 딱 24시간 뒤
-            userTitles.put(targetId, newTitle + "|" + expireTime); // 칭호와 만료시간을 |로 구분해서 저장
+            String existingTitles = userTitles.get(targetId);
+
+            newTitle = parts[2];
+            long expireTime = System.currentTimeMillis() + (24 * 60 * 60 * 1000); // 24시간 뒤
+            String newEntry = newTitle + "|" + expireTime;
+
+            if (existingTitles != null && !existingTitles.isEmpty()) {
+                // 기존 칭호가 있다면 콤마로 연결
+                userTitles.put(targetId, existingTitles + "," + newEntry);
+            } else {
+                // 처음 칭호를 부여하는 경우
+                userTitles.put(targetId, newEntry);
+            }
             DataManaGer.saveTitles(userTitles);
 
             // 4. 아이템 소모
@@ -579,6 +588,34 @@ public class MessageListener extends ListenerAdapter {
                 targetMember.modifyNickname("[" + newTitle + "] " + pureName).queue();
             }
             event.getChannel().sendMessage("✅ **" + targetMember.getEffectiveName() + "**님의 칭호가 강제 변경되었습니다!").queue();
+        }
+
+        // 하단 만료 체크 로직 (이렇게 바꾸셔야 합니다)
+        String titleData = userTitles.get(userId);
+        if (titleData != null && titleData.contains(",")) { // 콤마가 있다면 여러 개임
+            String[] entries = titleData.split(",");
+            List<String> validEntries = new ArrayList<>();
+            boolean isChanged = false;
+
+            for (String entry : entries) {
+                String[] details = entry.split("\\|");
+                if (details.length < 2) continue;
+
+                long expire = Long.parseLong(details[1]);
+                if (System.currentTimeMillis() < expire) {
+                    validEntries.add(entry); // 유효한 칭호만 리스트에 담음
+                } else {
+                    isChanged = true; // 만료된 게 하나라도 있음
+                }
+            }
+
+            if (isChanged) {
+                if (validEntries.isEmpty()) userTitles.remove(userId);
+                else userTitles.put(userId, String.join(",", validEntries));
+
+                DataManaGer.saveTitles(userTitles);
+                // 닉네임 원상복구 로직...
+            }
         }
 
 // 칭호교환
