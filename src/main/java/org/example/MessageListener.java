@@ -70,12 +70,13 @@ public class MessageListener extends ListenerAdapter {
     public boolean isExpiresd(String dateString) {
         if (dateString == null || dateString.isEmpty()) return false;
         try {
-            // 무조건 yyyyMMdd 형식으로만 처리합니다.
             java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.BASIC_ISO_DATE;
             java.time.LocalDate expiryDate = java.time.LocalDate.parse(dateString, formatter);
+
+            // [수정] 오늘 날짜가 만료일보다 '뒤'에 있어야(만료일이 과거여야) true를 반환
             return java.time.LocalDate.now().isAfter(expiryDate);
         } catch (Exception e) {
-            return false; // 형식이 잘못되었으면 만료 안 된 것으로 간주
+            return false;
         }
     }
 
