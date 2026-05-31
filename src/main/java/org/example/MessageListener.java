@@ -82,63 +82,53 @@ public class MessageListener extends ListenerAdapter {
 
     private void checkTitlse(MessageReceivedEvent event) {
         String userId = event.getAuthor().getId();
-        net.dv8tion.jda.api.entities.Member member = event.getMember();
+        if (!userTitles.containsKey(userId)) return;
 
-        // [수정] 여기서 pureName을 확실하게 선언합니다.
-        String currentNickname = (member != null) ? member.getEffectiveName() : "알수없음";
-        String pureName = currentNickname.replaceAll("\\[.*?\\]", "").trim();
+        String data = userTitles.get(userId);
+        String[] entries = data.split(",");
+        List<String> validEntries = new ArrayList<>();
+        boolean isChanged = false;
 
-        // 1. 칭호 만료 체크
-        if (userTitles.containsKey(userId)) {
-            String data = userTitles.get(userId);
-            String[] entries = data.split(",");
-            List<String> validEntries = new ArrayList<>();
-            boolean isChanged = false;
+        // 오늘 날짜 (비교용)
+        java.time.LocalDate today = java.time.LocalDate.now();
 
-            for (String entry : entries) {
-                String[] parts = entry.split("\\|");
-                if (parts.length < 2) continue;
+        for (String entry : entries) {
+            String[] parts = entry.split("\\|");
+            if (parts.length < 2) continue;
 
-                String title = parts[0];
-                String expireData = parts[1];
+            String title = parts[0];
+            String dateStr = parts[1]; // 예: 20260614
 
-                if (isExpiresd(expireData)) {
+            try {
+                // 날짜 파싱 (yyyyMMdd -> LocalDate)
+                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.BASIC_ISO_DATE;
+                java.time.LocalDate expiryDate = java.time.LocalDate.parse(dateStr, formatter);
+
+                // [핵심] 만료일이 오늘보다 이전이면 만료된 것임
+                if (expiryDate.isBefore(today)) {
                     isChanged = true;
                     event.getChannel().sendMessage("⏳ [" + title + "] 칭호 기간이 만료되어 회수되었습니다.").queue();
                 } else {
                     validEntries.add(entry);
                 }
-            }
-
-            if (isChanged) {
-                if (validEntries.isEmpty()) userTitles.remove(userId);
-                else userTitles.put(userId, String.join(",", validEntries));
-                DataManaGer.saveTitles(userTitles);
-
-                if (member != null && !member.isOwner()) {
-                    member.modifyNickname(pureName).queue();
-                }
+            } catch (Exception e) {
+                // 날짜 형식이 이상하면 그냥 유지 (에러 방지)
+                validEntries.add(entry);
             }
         }
 
-        // 2. 대출 만기 체크
-        long now = System.currentTimeMillis();
-        if (debtDeadline.containsKey(userId) && now > debtDeadline.get(userId)) {
-            int points = userPoints.getOrDefault(userId, 0);
-            int debt = userDebt.get(userId);
+        if (isChanged) {
+            if (validEntries.isEmpty()) userTitles.remove(userId);
+            else userTitles.put(userId, String.join(",", validEntries));
 
-            userPoints.put(userId, points - debt);
-            userDebt.remove(userId);
-            debtDeadline.remove(userId);
+            DataManaGer.saveTitles(userTitles);
 
-            DataManaGer.saveDebts(userDebt);
-            DataManaGer.saveDeadlines(debtDeadline);
-            DataManaGer.savePoints(userPoints, event.getGuild());
-
-            if (member != null && !member.isOwner()) {
-                member.modifyNickname("[노예] " + pureName).queue();
+            // 닉네임 원상복구 로직
+            net.dv8tion.jda.api.entities.Member m = event.getMember();
+            if (m != null && !m.isOwner()) {
+                String pureName = m.getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
+                m.modifyNickname(pureName).queue();
             }
-            event.getChannel().sendMessage("⛓️ **[" + pureName + "]**님의 대출 만기일이 지나 모든 자산이 압류되었습니다. 현재 잔고: **" + (points - debt) + " P**").queue();
         }
     }
 
