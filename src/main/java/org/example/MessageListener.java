@@ -71,63 +71,67 @@ public class MessageListener extends ListenerAdapter {
         if (dateString == null || dateString.isEmpty()) return false;
 
         try {
-            // [핵심] 숫자와 연관 없는 문자(], [, 등)를 전부 제거하고 숫자만 남깁니다.
-            String cleanDate = dateString.replaceAll("[^0-9]", "");
+            // 1. 숫자만 추출
+            String cleanData = dateString.replaceAll("[^0-9]", "");
 
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
-            LocalDate expiryDate = LocalDate.parse(cleanDate, formatter);
-            LocalDate now = LocalDate.now();
-
-            return now.isAfter(expiryDate);
+            // 2. 만약 10자리 이상의 긴 숫자(밀리초)라면 시간 기반 처리
+            if (cleanData.length() > 10) {
+                long expireTime = Long.parseLong(cleanData);
+                return System.currentTimeMillis() > expireTime;
+            }
+            // 3. 기존 날짜(yyyyMMdd) 기반 처리
+            else {
+                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd");
+                java.time.LocalDate expiryDate = java.time.LocalDate.parse(cleanData, formatter);
+                return java.time.LocalDate.now().isAfter(expiryDate);
+            }
         } catch (Exception e) {
-            System.out.println("날짜 파싱 오류 발생: " + dateString);
-            return false; // 파싱 실패 시 만료되지 않은 것으로 간주하거나 에러 처리
+            return false;
         }
     }
 
     private void checkTitlse(MessageReceivedEvent event) {
-        // 1. 닉네임이 아닌 '고유 ID'를 키로 사용합니다.
         String userId = event.getAuthor().getId();
-        String currentNickname = event.getMember().getEffectiveName();
+        net.dv8tion.jda.api.entities.Member member = event.getMember();
+
+        // [수정] 여기서 pureName을 확실하게 선언합니다.
+        String currentNickname = (member != null) ? member.getEffectiveName() : "알수없음";
         String pureName = currentNickname.replaceAll("\\[.*?\\]", "").trim();
 
-        // 2. 데이터 조회도 userId로!
-        if (!userTitles.containsKey(userId)) return;
+        // 1. 칭호 만료 체크
+        if (userTitles.containsKey(userId)) {
+            String data = userTitles.get(userId);
+            String[] entries = data.split(",");
+            List<String> validEntries = new ArrayList<>();
+            boolean isChanged = false;
 
-        String data = userTitles.get(userId);
-        String[] entries = data.split(",");
-        StringBuilder newInventory = new StringBuilder();
-        boolean isChanged = false;
+            for (String entry : entries) {
+                String[] parts = entry.split("\\|");
+                if (parts.length < 2) continue;
 
-        for (String entry : entries) {
-            String[] parts = entry.split("\\|");
-            if (parts.length < 2) continue;
+                String title = parts[0];
+                String expireData = parts[1];
 
-            String title = parts[0];
-            String expirDate = parts[1];
+                if (isExpiresd(expireData)) {
+                    isChanged = true;
+                    event.getChannel().sendMessage("⏳ [" + title + "] 칭호 기간이 만료되어 회수되었습니다.").queue();
+                } else {
+                    validEntries.add(entry);
+                }
+            }
 
-            if (isExpiresd(expirDate)) {
-                isChanged = true;
-                event.getChannel().sendMessage(" [" + title + "] 칭호 기간이 만료되어 회수되었습니다.").queue();
-            } else {
-                if (newInventory.length() > 0) newInventory.append(",");
-                newInventory.append(entry);
+            if (isChanged) {
+                if (validEntries.isEmpty()) userTitles.remove(userId);
+                else userTitles.put(userId, String.join(",", validEntries));
+                DataManaGer.saveTitles(userTitles);
+
+                if (member != null && !member.isOwner()) {
+                    member.modifyNickname(pureName).queue();
+                }
             }
         }
 
-        if (isChanged) {
-            // 3. 저장도 userId로!
-            if (newInventory.length() == 0) userTitles.remove(userId);
-            else userTitles.put(userId, newInventory.toString());
-
-            DataManaGer.saveTitles(userTitles);
-
-            if (!event.getMember().isOwner()) {
-                event.getMember().modifyNickname(pureName).queue();
-            }
-        }
-
-        // 4. 만기일 확인도 userId로!
+        // 2. 대출 만기 체크
         long now = System.currentTimeMillis();
         if (debtDeadline.containsKey(userId) && now > debtDeadline.get(userId)) {
             int points = userPoints.getOrDefault(userId, 0);
@@ -139,11 +143,12 @@ public class MessageListener extends ListenerAdapter {
 
             DataManaGer.saveDebts(userDebt);
             DataManaGer.saveDeadlines(debtDeadline);
-
-            event.getMember().modifyNickname("[노예] " + pureName).queue();
-            event.getChannel().sendMessage("⛓️ **[" + pureName + "]**님의 대출 만기일이 지나 모든 자산이 압류되었습니다. 현재 잔고: **" + (points - debt) + " P**").queue();
-
             DataManaGer.savePoints(userPoints, event.getGuild());
+
+            if (member != null && !member.isOwner()) {
+                member.modifyNickname("[노예] " + pureName).queue();
+            }
+            event.getChannel().sendMessage("⛓️ **[" + pureName + "]**님의 대출 만기일이 지나 모든 자산이 압류되었습니다. 현재 잔고: **" + (points - debt) + " P**").queue();
         }
     }
 
