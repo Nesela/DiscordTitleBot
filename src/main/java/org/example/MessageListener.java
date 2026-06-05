@@ -511,56 +511,32 @@ public class MessageListener extends ListenerAdapter {
                 return;
             }
 
-            String newTitle = parts[2];
-            if (newTitle.length() > 4) {
-                event.getChannel().sendMessage("❌ 칭호는 최대 4글자까지만 가능합니다!").queue();
-                return;
-            }
+            // 1. 유저 찾기 및 데이터 저장 (여기는 건드리지 마세요)
+            String targetId = event.getMessage().getMentions().getMembers().isEmpty() ? parts[1] : event.getMessage().getMentions().getMembers().get(0).getId();
 
-            // 1. 아이템 체크
-            int items = userItems.getOrDefault(userId, 0);
-            if (items <= 0) {
-                event.getChannel().sendMessage("❌ 보유한 '강제 칭호권'이 없습니다.").queue();
-                return;
-            }
-
-            // 2. 타겟 찾기
-            String targetId = null;
-            if (!event.getMessage().getMentions().getMembers().isEmpty()) {
-                targetId = event.getMessage().getMentions().getMembers().get(0).getId();
-            } else {
-                targetId = parts[1]; // ID 입력으로 가정
-            }
-
-            if (targetId == null) {
-                event.getChannel().sendMessage("❌ 유저를 찾을 수 없습니다.").queue();
-                return;
-            }
-
-            // [칭호 저장 로직]
-            String newEntry = newTitle + "|" + getExpirationDate(1);
+            String newEntry = parts[2] + "|" + getExpirationDate(1);
             String existingTitles = userTitles.getOrDefault(targetId, "");
-
-            if (existingTitles.isEmpty()) {
-                userTitles.put(targetId, newEntry);
-            } else {
-                userTitles.put(targetId, existingTitles + "," + newEntry);
-            }
+            userTitles.put(targetId, existingTitles.isEmpty() ? newEntry : existingTitles + "," + newEntry);
             DataManaGer.saveTitles(userTitles);
 
-            // 4. 아이템 차감
-            userItems.put(userId, items - 1);
+            userItems.put(userId, userItems.getOrDefault(userId, 0) - 1);
             DataManaGer.saveItems(userItems);
 
-            // 5. 닉네임 변경 (유저가 서버에 있을 때만)
-            net.dv8tion.jda.api.entities.Member targetMember = event.getGuild().getMemberById(targetId);
-            if (targetMember != null && !targetMember.isOwner()) {
-                pureName = targetMember.getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
-                targetMember.modifyNickname("[" + newTitle + "] " + pureName).queue();
-                event.getChannel().sendMessage("✅ **" + targetMember.getEffectiveName() + "**님의 칭호를 강제 부여했습니다!").queue();
-            } else {
-                event.getChannel().sendMessage("✅ 데이터 저장 완료 (대상이 서버에 없어 닉네임은 변경되지 않음)").queue();
-            }
+            // 2. 닉네임 변경 (이 부분이 핵심입니다!)
+            event.getGuild().retrieveMemberById(targetId).queue(targetMember -> {
+                if (!targetMember.isOwner()) {
+                    // [해결] 람다식 내부에서만 사용하는 변수로 새로 만듭니다.
+                    String currentName = targetMember.getEffectiveName();
+                    String newName = "[" + parts[2] + "] " + currentName.replaceAll("\\[.*?\\]", "").trim();
+
+                    targetMember.modifyNickname(newName).queue(
+                            success -> event.getChannel().sendMessage("✅ **" + targetMember.getEffectiveName() + "**님의 칭호를 강제 부여했습니다!").queue(),
+                            error -> event.getChannel().sendMessage("❌ 닉네임 변경 실패 (권한이나 역할 위치를 확인하세요)").queue()
+                    );
+                }
+            }, error -> {
+                event.getChannel().sendMessage("✅ 데이터는 저장되었으나, 대상 유저를 서버에서 찾을 수 없습니다.").queue();
+            });
         }
 
         // 하단 만료 체크 로직 (이렇게 바꾸셔야 합니다)
