@@ -512,31 +512,24 @@ public class MessageListener extends ListenerAdapter {
             }
 
             String newTitle = parts[2];
-
-            // [추가] 4글자 초과 시 막기
             if (newTitle.length() > 4) {
                 event.getChannel().sendMessage("❌ 칭호는 최대 4글자까지만 가능합니다!").queue();
                 return;
             }
 
-            // 1. 아이템 보유 확인
+            // 1. 아이템 체크
             int items = userItems.getOrDefault(userId, 0);
             if (items <= 0) {
-                event.getChannel().sendMessage("❌ 보유한 '강제 칭호권'이 없습니다. 상점에서 구매하세요!").queue();
+                event.getChannel().sendMessage("❌ 보유한 '강제 칭호권'이 없습니다.").queue();
                 return;
             }
 
-            // 2. 타겟 유저 찾기
+            // 2. 타겟 찾기
             String targetId = null;
             if (!event.getMessage().getMentions().getMembers().isEmpty()) {
                 targetId = event.getMessage().getMentions().getMembers().get(0).getId();
             } else {
-                for (net.dv8tion.jda.api.entities.Member m : event.getGuild().getMembers()) {
-                    if (m.getId().equals(parts[1]) || m.getEffectiveName().contains(parts[1])) {
-                        targetId = m.getId();
-                        break;
-                    }
-                }
+                targetId = parts[1]; // ID 입력으로 가정
             }
 
             if (targetId == null) {
@@ -545,52 +538,67 @@ public class MessageListener extends ListenerAdapter {
             }
 
             // [칭호 저장 로직]
-            String newEntry = parts[2] + "|" + getExpirationDate(1);
+            String newEntry = newTitle + "|" + getExpirationDate(1);
             String existingTitles = userTitles.getOrDefault(targetId, "");
-            userTitles.put(targetId, existingTitles.isEmpty() ? newEntry : existingTitles + "," + newEntry);
+
+            if (existingTitles.isEmpty()) {
+                userTitles.put(targetId, newEntry);
+            } else {
+                userTitles.put(targetId, existingTitles + "," + newEntry);
+            }
             DataManaGer.saveTitles(userTitles);
 
-            // [아이템 소모]
+            // 4. 아이템 차감
             userItems.put(userId, items - 1);
-            DataManaGer.saveItems(userItems); // 저장도 잊지 마세요!
+            DataManaGer.saveItems(userItems);
 
-            // [핵심 수정: 안전한 닉네임 변경]
+            // 5. 닉네임 변경 (유저가 서버에 있을 때만)
             net.dv8tion.jda.api.entities.Member targetMember = event.getGuild().getMemberById(targetId);
-            String displayName = (targetMember != null) ? targetMember.getEffectiveName() : "알수없음";
-
             if (targetMember != null && !targetMember.isOwner()) {
                 pureName = targetMember.getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
-                targetMember.modifyNickname("[" + parts[2] + "] " + pureName).queue();
-                event.getChannel().sendMessage("✅ **" + displayName + "**님의 칭호가 강제 변경되었습니다!").queue();
+                targetMember.modifyNickname("[" + newTitle + "] " + pureName).queue();
+                event.getChannel().sendMessage("✅ **" + targetMember.getEffectiveName() + "**님의 칭호를 강제 부여했습니다!").queue();
             } else {
-                // 유저가 나갔거나 봇이 멤버를 찾지 못했을 때
-                event.getChannel().sendMessage("✅ 칭호 데이터는 저장되었으나, 대상이 서버에 없어 닉네임은 변경되지 않았습니다.").queue();
+                event.getChannel().sendMessage("✅ 데이터 저장 완료 (대상이 서버에 없어 닉네임은 변경되지 않음)").queue();
             }
         }
 
         // 하단 만료 체크 로직 (이렇게 바꾸셔야 합니다)
         String titleData = userTitles.get(userId);
-// [수정] 콤마가 있거나, 파이프(|)가 있으면(칭호가 1개 이상 존재하면) 모두 체크
-        if (titleData != null && (titleData.contains(",") || titleData.contains("|"))) {
+        if (titleData != null && titleData.contains("|")) {
             String[] entries = titleData.split(",");
             List<String> validEntries = new ArrayList<>();
             boolean isChanged = false;
-
-            // 오늘 날짜를 yyyyMMdd 형식으로 가져옵니다 (예: 20260531)
             String today = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
 
             for (String entry : entries) {
                 String[] details = entry.split("\\|");
                 if (details.length < 2) continue;
 
-                String expireDate = details[1]; // 저장된 만료일 (예: 20260614)
+                String expireDate = details[1]; // 예: 20260614
 
-                // 오늘 날짜와 만료일을 문자열로 비교합니다
-                // compareTo 결과가 >= 0 이면 오늘보다 미래이거나 오늘임 (유효)
+                // 오늘 날짜와 만료일을 사전순 비교 (오늘보다 작으면 과거=만료)
                 if (expireDate.compareTo(today) >= 0) {
                     validEntries.add(entry);
                 } else {
-                    isChanged = true; // 만료일이 지났으므로 삭제 대상
+                    isChanged = true; // 만료된 칭호 발견
+                }
+            }
+
+            if (isChanged) {
+                if (validEntries.isEmpty()) {
+                    userTitles.remove(userId);
+                } else {
+                    userTitles.put(userId, String.join(",", validEntries));
+                }
+                DataManaGer.saveTitles(userTitles);
+
+                // 닉네임 원상복구
+                net.dv8tion.jda.api.entities.Member m = event.getMember();
+                if (member != null && !member.isOwner()) {
+                    pureName = member.getEffectiveName().replaceAll("\\[.*?\\]", "").trim();
+                    member.modifyNickname(pureName).queue();
+                    event.getChannel().sendMessage("⏳ 만료된 칭호가 회수되어 닉네임이 돌아갑니다.").queue();
                 }
             }
 
